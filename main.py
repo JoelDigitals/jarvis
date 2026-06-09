@@ -672,14 +672,14 @@ TOOL_DECLARATIONS = [
     },
     {
         "name": "wecker",
-        "description": "Wecker (Alarm) und Musik-Steuerung. Aktionen: set (stellen), list (anzeigen), remove (entfernen), play (Musik abspielen), stop (Musik stoppen). Musikdateien im music/-Ordner.",
+        "description": "Wecker (Alarm), Musik-Steuerung und Radio. Aktionen: set (Wecker stellen), list (Wecker anzeigen), remove (Wecker entfernen), play (Musik abspielen), radio (Radio streamen z.B. sr1, sr3, swr3), stop (alles stoppen). Musikdateien im music/-Ordner.",
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "action": {"type": "STRING", "description": "set | list | remove | play | stop"},
+                "action": {"type": "STRING", "description": "set | list | remove | play | radio | stop"},
                 "time":   {"type": "STRING", "description": "Uhrzeit HH:MM für set"},
                 "id":     {"type": "INTEGER", "description": "Wecker-ID für remove"},
-                "music":  {"type": "STRING", "description": "Musikdatei-Name (optional)"},
+                "music":  {"type": "STRING", "description": "Musikdatei-Name (play) oder Sendername (radio): sr1, sr3, swr1, swr3, 1live, wdr2, deutschlandfunk"},
             },
             "required": ["action"]
         }
