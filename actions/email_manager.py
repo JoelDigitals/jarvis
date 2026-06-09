@@ -43,6 +43,13 @@ def _load_all_accounts() -> list[dict]:
         pass
     return []
 
+def _get_default_sender() -> str:
+    try:
+        from config.settings import load
+        return (load().get("default_sender") or "").strip().lower()
+    except:
+        return ""
+
 def _pick_account(parameters: dict) -> dict:
     accounts = _load_all_accounts()
     if not accounts:
@@ -51,6 +58,11 @@ def _pick_account(parameters: dict) -> dict:
     if name:
         for a in accounts:
             if a.get("name", "").lower() == name:
+                return a
+    default = _get_default_sender()
+    if default:
+        for a in accounts:
+            if a.get("name", "").lower() == default:
                 return a
     return accounts[0]
 
@@ -229,6 +241,19 @@ def test_connection() -> str:
     except Exception as e:
         return f"Verbindungsfehler: {e}"
 
+def email_accounts() -> str:
+    accounts = _load_all_accounts()
+    if not accounts:
+        return "Keine E-Mail-Konten konfiguriert."
+    default = _get_default_sender()
+    lines = [f"Konfigurierte E-Mail-Konten ({len(accounts)}):"]
+    for a in accounts:
+        name = a.get("name", "?")
+        email = a.get("email", "?")
+        marker = " ← STANDARD" if name.lower() == default else ""
+        lines.append(f"  • {name} — {email}{marker}")
+    return "\n".join(lines)
+
 def email_action(parameters: dict, player=None) -> str:
     action = parameters.get("action", "list").lower().strip()
     if action == "setup":
@@ -237,5 +262,7 @@ def email_action(parameters: dict, player=None) -> str:
         return email_send(parameters, player)
     elif action == "read":
         return email_read(parameters, player)
+    elif action == "accounts":
+        return email_accounts()
     else:
         return email_list(parameters, player)

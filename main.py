@@ -3,7 +3,9 @@ import gc
 import threading
 import json
 import sys
+import time
 import traceback
+from collections import deque
 from pathlib import Path
 
 import sounddevice as sd
@@ -39,6 +41,36 @@ CHANNELS            = 1
 SEND_SAMPLE_RATE    = 16000  # Gemini braucht 16kHz für Audio-Input
 RECEIVE_SAMPLE_RATE = 24000  # Wiedergabe bleibt gut
 CHUNK_SIZE          = 16384   # große Blöcke = minimale CPU-Interrupts
+AUDIO_BUF_MAX       = 300     # max Audio-Chunks im Puffer (ältere werden verworfen)
+
+
+class _AudioBuffer:
+    """Async-fähiger Ringpuffer: verwirft älteste Chunks bei Überlauf."""
+    def __init__(self, maxlen: int = AUDIO_BUF_MAX):
+        self._dq = deque(maxlen=maxlen)
+        self._ev = asyncio.Event()
+        self._interrupted = False
+
+    def put(self, item: bytes):
+        self._dq.append(item)
+        self._ev.set()
+
+    def interrupt(self):
+        self._interrupted = True
+        self._dq.clear()
+        self._ev.set()
+
+    def clear(self):
+        self._dq.clear()
+
+    async def get(self) -> bytes:
+        while not self._dq:
+            if self._interrupted:
+                self._interrupted = False
+                raise asyncio.CancelledError()
+            self._ev.clear()
+            await self._ev.wait()
+        return self._dq.popleft()
 
 
 def _get_api_key() -> str:
@@ -128,10 +160,12 @@ TOOL_DECLARATIONS = [
     },
     {
         "name": "do_briefing",
-        "description": "Führt das gesamte Morgen-Briefing in EINEM Aufruf aus: Wetter, JDS-Aufgaben, E-Mails, Admin-Dashboard. Einziger Aufruf für das Briefing.",
+        "description": "KOMPLETTES Briefing in EINEM Aufruf: Wetter, Admin-Dashboard, JDS-Aufgaben + Kalender + Meetings, E-Mails. Ergebnis enthält 'BRIEFING-TEXT ZUM VORLESEN:'. Parameter greeting überschreibt die automatische Tageszeit-Begrüßung.",
         "parameters": {
             "type": "OBJECT",
-            "properties": {},
+            "properties": {
+                "greeting": {"type": "STRING", "description": "optional: 'Guten Morgen', 'Guten Tag' oder 'Guten Abend' — überschreibt Auto-Erkennung"}
+            },
             "required": []
         }
     },
@@ -463,6 +497,26 @@ TOOL_DECLARATIONS = [
     }
     },
     {
+        "name": "knowledge_base",
+        "description": (
+            "Wissensdatenbank für dauerhafte Informationen über die Firma, "
+            "Kunden, Prozesse, Produkte und alles was JARVIS wissen muss. "
+            "Aktionen: set (speichern), get (abrufen), delete (löschen). "
+            "Kategorien: company, customers, processes, products, contacts, support, notes. "
+            "Beispiel: knowledge_base(action='set', category='company', key='address', value='Musterstr. 1')"
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action":   {"type": "STRING", "description": "set | get | delete"},
+                "category": {"type": "STRING", "description": "Kategorie z.B. company, customers, processes, products"},
+                "key":      {"type": "STRING", "description": "Schlüsselname"},
+                "value":    {"type": "STRING", "description": "Wert für set"},
+            },
+            "required": ["action"]
+        }
+    },
+    {
         "name": "save_memory",
         "description": (
             "Save an important personal fact about the user to long-term memory. "
@@ -495,17 +549,18 @@ TOOL_DECLARATIONS = [
     {
         "name": "email_manager",
         "description": (
-            "Verwaltet E-Mails: list (lesen), read (einzelne Nachricht), send (senden), setup (einrichten). "
-            "Mehrere Konten möglich — Parameter account wählt per Name/Label. "
-            "list: zeigt die letzten E-Mails an. read(index): liest eine bestimmte E-Mail. "
-            "send(to, subject, body): sendet eine E-Mail. "
-            "setup(email, password, name): konfiguriert ein neues E-Mail-Konto."
+            "E-Mail-Verwaltung mit mehreren Konten. Aktionen: "
+            "list (E-Mails lesen), read (einzelne), send (senden), "
+            "accounts (konfigurierte Konten anzeigen), setup (neues Konto). "
+            "WICHTIG: Vor dem Senden IMMER email_manager(action='accounts') aufrufen, "
+            "um die echten Adressen der konfigurierten Konten zu sehen! "
+            "Parameter 'account' wählt per Name. Standard-Absender in Einstellungen."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "action":   {"type": "STRING", "description": "list | read | send | setup"},
-                "account":  {"type": "STRING", "description": "Name des E-Mail-Kontos (z.B. Privat, Geschäftlich)"},
+                "action":   {"type": "STRING", "description": "list | read | send | setup | accounts"},
+                "account":  {"type": "STRING", "description": "Name des E-Mail-Kontos (Groß-/Kleinschreibung egal)"},
                 "count":    {"type": "INTEGER", "description": "Anzahl E-Mails für list (default: 5)"},
                 "index":    {"type": "INTEGER", "description": "Index für read (1 = neueste)"},
                 "folder":   {"type": "STRING", "description": "IMAP-Ordner (default: INBOX)"},
@@ -514,7 +569,7 @@ TOOL_DECLARATIONS = [
                 "body":     {"type": "STRING", "description": "Nachrichtentext für send"},
                 "email":    {"type": "STRING", "description": "E-Mail-Adresse für setup"},
                 "password": {"type": "STRING", "description": "Passwort/App-Passwort für setup"},
-                "name":     {"type": "STRING", "description": "Name/Label für setup (z.B. Privat)"},
+                "name":     {"type": "STRING", "description": "Name/Label für setup"},
                 "unread_only": {"type": "BOOLEAN", "description": "Nur ungelesene E-Mails (list)"},
             },
             "required": ["action"]
@@ -539,11 +594,11 @@ TOOL_DECLARATIONS = [
     {
         "name": "jds_connect",
         "description": (
-            "JDS Management-System. Aktionen: setup (einrichten), connect (verbinden), "
-            "status, dashboard, tasks (Aufgaben), task (einzelne Aufgabe), "
-            "meetings, leads, customers, products, vacations, deliveries, "
-            "invoices, events, notifications, storage, users. "
-            "Bei setup: base_url, team_code, api_token angeben."
+            "JDS CRM- & Management-System. Aktionen: setup, connect, status, "
+            "dashboard (Übersicht), tasks (meine Aufgaben), task (einzelne), "
+            "meetings (Termine), events (Kalender), leads, customers, products, "
+            "vacations, deliveries, invoices, notifications, storage, users. "
+            "Für Briefing/Kalender: events(days=7) + meetings aufrufen."
         ),
         "parameters": {
             "type": "OBJECT",
@@ -653,19 +708,20 @@ TOOL_DECLARATIONS = [
     {
         "name": "admin_api",
         "description": (
-            "Joel-Digitals.de Admin-API. Prüft Bestellungen, Termine, Blog-Statistiken, Support-Tickets. "
-            "Nützlich fürs Morgen-Briefing. Aktionen: dashboard (Übersicht), appointments (Termine), "
-            "orders (Bestellungen), blog (Blog-Stats), tickets (Support-Tickets), "
-            "confirm_appointment / reject_appointment (Termin bestätigen/ablehnen), "
-            "reply_ticket (auf Ticket antworten), briefing (alles auf einmal fürs Morgen-Briefing)."
+            "Joel-Digitals.de Admin-API. Dashboard, Bestellungen, Termine, Blog, Support-Tickets, "
+            "Blog-Veröffentlichung. Aktionen: dashboard, appointments, orders, blog, tickets, "
+            "confirm_appointment, reject_appointment, reply_ticket, publish_blog, briefing."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "action":  {"type": "STRING", "description": "dashboard | appointments | confirm_appointment | reject_appointment | blog | tickets | reply_ticket | orders | briefing"},
+                "action":  {"type": "STRING", "description": "dashboard | appointments | confirm_appointment | reject_appointment | blog | tickets | reply_ticket | orders | publish_blog | briefing"},
                 "status":  {"type": "STRING", "description": "Filter: pending | confirmed | rejected | open | closed"},
                 "id":      {"type": "INTEGER", "description": "ID für confirm/reject/reply"},
                 "message": {"type": "STRING", "description": "Nachricht für reply_ticket"},
+                "title":   {"type": "STRING", "description": "Titel für publish_blog"},
+                "content": {"type": "STRING", "description": "Inhalt für publish_blog (HTML/Markdown)"},
+                "lang":    {"type": "STRING", "description": "Sprache: de (Default) | en"},
             },
             "required": ["action"]
         }
@@ -682,6 +738,23 @@ TOOL_DECLARATIONS = [
                 "music":  {"type": "STRING", "description": "Musikdatei-Name (play) oder Sendername (radio): sr1, sr3, swr1, swr3, 1live, wdr2, deutschlandfunk"},
             },
             "required": ["action"]
+        }
+    },
+    {
+        "name": "set_autopilot",
+        "description": (
+            "Aktiviert/deaktiviert den Autopilot-Modus. Wenn aktiv, arbeitet JARVIS "
+            "selbstständig alle offenen Aufgaben ab, beantwortet E-Mails und "
+            "protokolliert alle Aktionen. Nutze dies wenn der Benutzer sagt "
+            "'ich bin weg', 'halt die Stellung', 'übernimm du' oder ähnliches. "
+            "Beim Deaktivieren wird eine Zusammenfassung zurückgegeben."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "active": {"type": "BOOLEAN", "description": "true = aktivieren, false = deaktivieren"},
+            },
+            "required": ["active"]
         }
     },
 ]
@@ -830,6 +903,26 @@ class JarvisLive:
             return types.FunctionResponse(
                 id=fc.id, name=name,
                 response={"result": "ok", "silent": True}
+            )
+
+        if name == "knowledge_base":
+            from actions.knowledge_base import kb_action
+            r = kb_action(args, player=self.ui)
+            if not self.ui.muted:
+                self.ui.set_state("LISTENING")
+            return types.FunctionResponse(
+                id=fc.id, name=name,
+                response={"result": r}
+            )
+
+        if name == "set_autopilot":
+            active = args.get("active", False)
+            summary = self._set_autopilot(active)
+            if not self.ui.muted:
+                self.ui.set_state("LISTENING")
+            return types.FunctionResponse(
+                id=fc.id, name=name,
+                response={"result": summary if not active else "Autopilot aktiviert"}
             )
 
         loop   = asyncio.get_event_loop()
@@ -1010,6 +1103,8 @@ class JarvisLive:
             traceback.print_exc()
             self.speak_error(name, e)
 
+        self._log_autopilot(f"{name}: {str(result)[:60]}")
+
         if not self.ui.muted:
             self.ui.set_state("LISTENING")
 
@@ -1051,10 +1146,6 @@ class JarvisLive:
         def callback(indata, frames, time_info, status):
             if self.ui.muted:
                 return
-            with self._speaking_lock:
-                jarvis_speaking = self._is_speaking
-            if jarvis_speaking:
-                return
             data = indata.tobytes()
             try:
                 loop.call_soon_threadsafe(_safe_put, {"data": data, "mime_type": "audio/pcm"})
@@ -1085,10 +1176,7 @@ class JarvisLive:
 
                     if response.data:
                         self.set_speaking(True)
-                        try:
-                            self.audio_in_queue.put_nowait(response.data)
-                        except asyncio.QueueFull:
-                            print("[JARVIS] ⚠️ Audio-Queue voll, überspringe Chunk")
+                        self.audio_buf.put(response.data)
 
                     if response.server_content:
                         sc = response.server_content
@@ -1102,6 +1190,11 @@ class JarvisLive:
                             txt = sc.input_transcription.text.strip()
                             if txt:
                                 in_buf.append(txt)
+                                # wake word detection → interrupt playback
+                                if self._is_speaking and ("jarvis" in txt.lower() or "javis" in txt.lower()):
+                                    print("[JARVIS] ⚡ Wake word erkannt — unterbreche")
+                                    self.audio_buf.interrupt()
+                                    self.set_speaking(False)
 
                         if sc.turn_complete:
                             self.set_speaking(False)
@@ -1165,7 +1258,22 @@ class JarvisLive:
         stream.start()
         try:
             while True:
-                chunk = await self.audio_in_queue.get()
+                try:
+                    chunk = await self.audio_buf.get()
+                except asyncio.CancelledError:
+                    # interruption by wake word
+                    self.set_speaking(False)
+                    stream.stop()
+                    stream.close()
+                    # recreate stream for next utterance
+                    stream = sd.RawOutputStream(
+                        samplerate=RECEIVE_SAMPLE_RATE,
+                        channels=CHANNELS,
+                        dtype="int16",
+                        blocksize=CHUNK_SIZE,
+                    )
+                    stream.start()
+                    continue
                 self.set_speaking(True)
                 await asyncio.to_thread(stream.write, chunk)
         except Exception as e:
@@ -1193,6 +1301,197 @@ class JarvisLive:
         except Exception as e:
             print(f"[Reminder] ⚠️ {e}")
 
+    def _setup_daily_report(self):
+        try:
+            import datetime
+            from config.settings import load as load_cfg
+            from actions.email_manager import email_action
+            from actions.briefing_action import do_briefing
+
+            cfg = load_cfg().get("daily_report", {})
+            if not cfg.get("enabled") or not cfg.get("recipient_email"):
+                print("[DAILY REPORT] Deaktiviert oder keine Empfänger-Adresse")
+                return
+
+            recipient = cfg["recipient_email"]
+            times = cfg.get("times", ["08:00", "13:00", "18:00", "23:00"])
+            inc_dash = cfg.get("include_dashboard", True)
+            inc_wthr = cfg.get("include_weather", True)
+            inc_eml = cfg.get("include_emails", True)
+
+            def _send_report():
+                try:
+                    print(f"[DAILY REPORT] Erstelle Bericht...")
+                    parts = []
+                    if inc_dash:
+                        r = do_briefing({"action": "briefing"}, player=self.ui)
+                        parts.append(r)
+                    if inc_wthr:
+                        from actions.weather_report import weather_action
+                        r = weather_action({"parameters": {}}, player=self.ui)
+                        parts.append(r)
+                    if inc_eml:
+                        r = email_action({"action": "list", "count": 3, "unread_only": True}, player=self.ui)
+                        parts.append(r)
+
+                    body = "\n\n---\n\n".join(parts)
+                    now_str = datetime.datetime.now().strftime("%d.%m.%Y %H:%M")
+                    result = email_action({
+                        "action": "send",
+                        "to": recipient,
+                        "subject": f"JARVIS Tagesbericht — {now_str}",
+                        "body": body,
+                    }, player=self.ui)
+                    print(f"[DAILY REPORT] {result}")
+                    self.ui.write_log(f"SYS: Tagesbericht gesendet an {recipient}")
+                except Exception as e:
+                    print(f"[DAILY REPORT] Fehler: {e}")
+
+            now = datetime.datetime.now()
+            for t_str in times:
+                try:
+                    h, m = t_str.strip().split(":")
+                    t = now.replace(hour=int(h), minute=int(m), second=0, microsecond=0)
+                    if t <= now:
+                        t += datetime.timedelta(days=1)
+                    delay = (t - now).total_seconds()
+                    threading.Timer(delay, _send_report).start()
+                    print(f"[DAILY REPORT] ⏰ Nächster Bericht um {t_str} — in {delay:.0f}s")
+                except Exception as e:
+                    print(f"[DAILY REPORT] ⚠️ Ungültige Zeit '{t_str}': {e}")
+
+            self.ui.write_log(f"SYS: Täglicher Bericht aktiv — {len(times)} Zeitpunkte")
+        except Exception as e:
+            print(f"[DAILY REPORT] ⚠️ {e}")
+
+    def _setup_email_scanner(self):
+        try:
+            from actions.email_manager import email_action
+            from config.settings import load as load_cfg
+            self._email_scan_count = 0
+            self._email_scan_log = []
+            self._email_scan_replied = set()
+
+            cfg = load_cfg()
+            self._email_forward_to = cfg.get("email_forward_to", "") or cfg.get("daily_report", {}).get("recipient_email", "")
+
+            def _scan():
+                try:
+                    r = email_action({"action": "list", "count": 5, "unread_only": True}, player=self.ui)
+                    self._email_scan_count += 1
+                    if r and "Keine" not in r and "Fehler" not in r:
+                        self._email_scan_log.append(f"[{time.strftime('%H:%M')}] Neue E-Mails")
+                        print(f"[EMAIL-SCAN] Neue E-Mails erkannt")
+                        _forward_unread(email_action)
+                except:
+                    pass
+                threading.Timer(900.0, _scan).start()
+
+            def _is_important(sender: str, subject: str, body: str) -> bool:
+                """Nur wichtige E-Mails weiterleiten (keine Newsletter/Spam)."""
+                sender_lower = sender.lower()
+                subject_lower = subject.lower()
+                body_lower = body.lower()[:1000]
+
+                # Newsletter/Marketing erkennen
+                newsletter_signals = [
+                    "unsubscribe", "abbestellen", "newsletter", "werbung",
+                    "marketing", "no-reply", "noreply", "mailjet", "sendgrid",
+                    "mailchimp", "constant contact", "kampagne",
+                ]
+                for s in newsletter_signals:
+                    if s in sender_lower or s in subject_lower:
+                        return False
+                    if s in body_lower:
+                        return False
+
+                # Wichtige Keywords in Betreff
+                important_keywords = [
+                    "auftrag", "bestellung", "rechnung", "angebot",
+                    "problem", "hilfe", "dringend", "support",
+                    "beschwerde", "widerruf", "kündigung",
+                    "stornierung", "reklamation", "frage", "anfrage",
+                    "defekt", "schaden", "fehler", "kaputt",
+                    "termin", "vereinbarung", "rückruf",
+                    "bezahlung", "zahlung", "überweisung",
+                    "account", "zugang", "passwort", "login",
+                ]
+                for kw in important_keywords:
+                    if kw in subject_lower:
+                        return True
+
+                # Bekannte Kunden-Domains oder Namen (optional: aus knowledge_base)
+                # Im Zweifel: wichtig, wenn es kein Newsletter ist
+                return True
+
+            def _forward_unread(ea):
+                if not self._email_forward_to:
+                    return
+                for idx in range(1, 4):
+                    try:
+                        raw = ea({"action": "read", "index": idx, "unread_only": True}, player=self.ui)
+                        if not raw or "Keine" in raw or "Fehler" in raw:
+                            continue
+                        sender = ""
+                        subject = ""
+                        for line in raw.split("\n"):
+                            if line.startswith("Von:"):
+                                sender = line[4:].strip()
+                            elif line.startswith("Betreff:"):
+                                subject = line[8:].strip()
+                        if not sender:
+                            continue
+                        uid = f"{sender}|{subject}"
+                        if uid in self._email_scan_replied:
+                            continue
+                        self._email_scan_replied.add(uid)
+
+                        if not _is_important(sender, subject, raw):
+                            print(f"[EMAIL-SCAN] ⏭ Unwichtig: {subject} von {sender}")
+                            continue
+
+                        fwd_body = (
+                            f"--- WEITERGELEITETE KUNDENANFRAGE (Autopilot) ---\n\n"
+                            f"{raw}\n\n"
+                            f"--- Ende der Weiterleitung ---\n\n"
+                            f"Diese E-Mail wurde automatisch vom JARVIS-Assistenten "
+                            f"weitergeleitet, da der Autopilot-Modus aktiv ist."
+                        )
+                        ea({"action": "send", "to": self._email_forward_to,
+                            "subject": f"✉ {subject} (weitergeleitet von {sender})",
+                            "body": fwd_body}, player=self.ui)
+                        self._log_autopilot(f"E-Mail weitergeleitet: {subject} von {sender}")
+                        self.ui.write_log(f"SYS: E-Mail weitergeleitet → {self._email_forward_to}")
+                        print(f"[EMAIL-SCAN] ✅ Wichtig: {subject} von {sender}")
+                    except:
+                        pass
+
+            threading.Timer(900.0, _scan).start()
+            print("[EMAIL-SCAN] ✅ Scan alle 15 Minuten aktiv")
+            if self._email_forward_to:
+                print(f"[EMAIL-SCAN] 📬 Weiterleitung an: {self._email_forward_to}")
+            self.ui.write_log("SYS: E-Mail-Scan alle 15 Minuten aktiviert")
+        except Exception as e:
+            print(f"[EMAIL-SCAN] ⚠️ {e}")
+
+    def _set_autopilot(self, active: bool, parameters: dict = None):
+        self._autopilot_active = active
+        self.ui.set_autopilot(active)
+        if active:
+            self._autopilot_log = []
+            print(f"[AUTOPILOT] ✅ Aktiviert — JARVIS hält Stellung")
+            self.ui.write_log("SYS: AUTOPILOT AKTIV — JARVIS hält Stellung")
+        else:
+            summary = "\n".join(self._autopilot_log[-20:]) if hasattr(self, "_autopilot_log") else "Keine Aktionen."
+            print(f"[AUTOPILOT] Deaktiviert.\n{summary}")
+            self.ui.write_log(f"SYS: Autopilot beendet")
+            return summary
+
+    def _log_autopilot(self, action: str):
+        if getattr(self, "_autopilot_active", False):
+            ts = time.strftime("%H:%M")
+            self._autopilot_log.append(f"[{ts}] {action}")
+
     def _connect_jds(self):
         try:
             cfg = {}
@@ -1207,10 +1506,16 @@ class JarvisLive:
             bu = cfg.get("base_url", "").strip()
             tc = cfg.get("team_code", "").strip()
             at = cfg.get("api_token", "").strip()
+            tuid = cfg.get("task_user_id", "").strip()
             if bu and at:
                 from actions.jds_client import jds_connect
                 result = jds_connect({"action": "setup", "base_url": bu, "team_code": tc, "api_token": at})
                 result = jds_connect({"action": "connect"})
+                if tuid:
+                    self._jds_task_user = tuid
+                    print(f"[JDS] 🤖 JARVIS-Aufgaben-User: {tuid}")
+                else:
+                    self._jds_task_user = ""
                 print(f"[JDS] {result}")
                 self.ui.write_log(f"SYS: {result}")
             else:
@@ -1275,7 +1580,7 @@ class JarvisLive:
                 ):
                     self.session        = session
                     self._loop          = asyncio.get_event_loop()
-                    self.audio_in_queue = asyncio.Queue(maxsize=500)
+                    self.audio_buf      = _AudioBuffer()
                     self.out_queue      = asyncio.Queue(maxsize=10)
 
                     print("[JARVIS] ✅ Connected.")
@@ -1292,9 +1597,12 @@ class JarvisLive:
                             print(f"[JARVIS] 📜 Context restored ({len(self._history)} turns)")
 
                     self._setup_hourly_reminder()
+                    self._setup_daily_report()
+                    self._setup_email_scanner()
                     self._connect_jds()
                     self._auto_setup_email()
                     self._start_discord()
+                    self._set_autopilot(False)
                     from actions.wecker import schedule_all
                     schedule_all()
 

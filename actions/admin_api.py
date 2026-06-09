@@ -188,6 +188,21 @@ def action_orders(status: str = "") -> str:
         lines.append(f"  {date} — {name} — {total} EUR [{o.get('status', '?')}]")
     return "\n".join(lines) if len(lines) > 1 else "Keine passenden Bestellungen."
 
+def action_publish_blog(title: str, content: str, lang: str = "de", status: str = "published") -> str:
+    if not title or not content:
+        return "Titel und Inhalt erforderlich."
+    r = _post("/blog/create/", {
+        "title": title,
+        "content": content,
+        "lang": lang,
+        "status": status,
+    })
+    if r.get("ok"):
+        d = r["data"]
+        post_id = d.get("id", d.get("post_id", "?"))
+        return f"Blog-Beitrag veröffentlicht: [{post_id}] {title}"
+    return r.get("error", "Fehler")
+
 def admin_action(parameters: dict, player=None) -> str:
     action = (parameters.get("action") or "dashboard").strip().lower()
     if action == "dashboard":
@@ -200,6 +215,13 @@ def admin_action(parameters: dict, player=None) -> str:
         return action_reject_appointment(int(parameters.get("id", 0)))
     elif action == "blog":
         return action_blog_stats()
+    elif action == "publish_blog":
+        return action_publish_blog(
+            parameters.get("title", ""),
+            parameters.get("content", ""),
+            parameters.get("lang", "de"),
+            parameters.get("status", "published"),
+        )
     elif action == "tickets":
         return action_tickets(parameters.get("status", ""), parameters.get("id"))
     elif action == "reply_ticket":

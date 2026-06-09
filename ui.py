@@ -23,7 +23,7 @@ from PyQt6.QtGui import (
     QRadialGradient, QShortcut,
 )
 from PyQt6.QtWidgets import (
-    QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QApplication, QCheckBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QMainWindow, QPushButton, QScrollArea, QSizePolicy, QTextEdit,
     QVBoxLayout, QWidget, QProgressBar,
 )
@@ -268,6 +268,16 @@ class HudCanvas(QWidget):
         self._backing_dirty = True
         self._load_face(face_path)
 
+        self._glow_tmr = QTimer(self)
+        self._glow_tmr.timeout.connect(self._on_glow_tick)
+        self._glow_tmr.setSingleShot(False)
+
+    def _on_glow_tick(self):
+        self.update()
+        # dynamic timer: faster when active, slower when idle
+        active = self._speaking or self._muted or self.state in ("THINKING", "PROCESSING")
+        self._glow_tmr.setInterval(60 if active else 250)
+
     @property
     def muted(self):
         return self._muted
@@ -276,6 +286,8 @@ class HudCanvas(QWidget):
     def muted(self, v):
         if self._muted != v:
             self._muted = v
+            if v:
+                self._glow_tmr.start(60)
             self.update()
 
     @property
@@ -286,7 +298,15 @@ class HudCanvas(QWidget):
     def speaking(self, v):
         if self._speaking != v:
             self._speaking = v
+            if v:
+                self._glow_tmr.start(60)
             self.update()
+
+    def set_state(self, s):
+        self.state = s
+        if s in ("THINKING", "PROCESSING"):
+            self._glow_tmr.start(60)
+        self.update()
 
     def _load_face(self, path: str):
         try:
@@ -319,7 +339,13 @@ class HudCanvas(QWidget):
             self._backing = QPixmap(W, H)
         p = QPainter(self._backing)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.fillRect(0, 0, W, H, qcol(C.BG))
+
+        c = QColor(C.BG)
+        grad = QRadialGradient(W / 2, H / 2, min(W, H) * 0.5)
+        grad.setColorAt(0.0, qcol("#0d1117", 255))
+        grad.setColorAt(0.8, qcol("#0d1117", 255))
+        grad.setColorAt(1.0, qcol("#010409", 255))
+        p.fillRect(0, 0, W, H, grad)
 
         cx, cy = W / 2, H / 2
         fw = min(W, H)
@@ -341,12 +367,25 @@ class HudCanvas(QWidget):
             p.drawText(QRectF(cx - 80, cy - 14, 160, 28),
                        Qt.AlignmentFlag.AlignCenter, "JARVIS")
 
-        ring_w = int(fw * 0.01) + 1
-        p.setPen(QPen(qcol(C.BORDER_B, 80), ring_w))
-        p.drawEllipse(QPointF(cx, cy), fw * 0.34, fw * 0.34)
-
         p.end()
         self._backing_dirty = False
+
+    def _glow_color(self) -> tuple[QColor, QColor]:
+        if self._muted:
+            return qcol(C.MUTED_C, 30), qcol(C.MUTED_C, 8)
+        if self._speaking:
+            t = time.monotonic()
+            pulse = 0.5 + 0.5 * math.sin(t * 3.0)
+            return qcol(C.ACC, int(20 + 30 * pulse)), qcol(C.ACC, int(5 + 10 * pulse))
+        if self.state in ("THINKING", "PROCESSING"):
+            t = time.monotonic()
+            pulse = 0.5 + 0.5 * math.sin(t * 2.0)
+            return qcol(C.ACC2, int(10 + 25 * pulse)), qcol(C.ACC2, int(3 + 8 * pulse))
+        if self.state == "LISTENING":
+            t = time.monotonic()
+            pulse = 0.5 + 0.5 * math.sin(t * 2.5)
+            return qcol(C.GREEN, int(10 + 25 * pulse)), qcol(C.GREEN, int(3 + 8 * pulse))
+        return qcol(C.PRI, 15), qcol(C.PRI, 5)
 
     def paintEvent(self, _):
         if self._backing_dirty or self._backing.size() != self.size():
@@ -354,12 +393,27 @@ class HudCanvas(QWidget):
 
         p = QPainter(self)
         p.drawPixmap(0, 0, self._backing)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         W, H = self.width(), self.height()
         cx, cy = W / 2, H / 2
         fw = min(W, H)
+        t = time.monotonic()
 
-        blink_on = (int(time.monotonic() * 2) % 12) < 6
+        # ── glow rings ──
+        glow_a, glow_b = self._glow_color()
+        ring_r = fw * 0.34
+        for i, (col, w) in enumerate([(glow_a, 6), (glow_b, 12)]):
+            if col.alpha() > 2:
+                p.setPen(QPen(col, w))
+                p.drawEllipse(QPointF(cx, cy), ring_r + i * 4, ring_r + i * 4)
+
+        # ── outer ring ──
+        p.setPen(QPen(qcol(C.BORDER_B, 80), int(fw * 0.01) + 1))
+        p.drawEllipse(QPointF(cx, cy), ring_r, ring_r)
+
+        # ── status label ──
+        blink_on = (int(t * 2) % 12) < 6
         sy = cy + fw * 0.40
         if self._muted:
             txt, col = "⊘  STUMM",     qcol(C.MUTED_C)
@@ -378,7 +432,6 @@ class HudCanvas(QWidget):
             sym = "●" if blink_on else "○"
             txt, col = f"{sym}  {self.state}", qcol(C.PRI)
 
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setPen(QPen(col, 1))
         p.setFont(QFont("Consolas", 13, QFont.Weight.Bold))
         p.drawText(QRectF(0, sy, W, 26), Qt.AlignmentFlag.AlignCenter, txt)
@@ -911,6 +964,41 @@ class SetupOverlay(QWidget):
         self.done.emit(key, or_key, self._sel_os)
 
 
+class _SectionCard(QFrame):
+    def __init__(self, title: str, subtitle: str = "", parent=None):
+        super().__init__(parent)
+        self.setStyleSheet(f"""
+            _SectionCard {{
+                background: rgba(13, 17, 23, 200);
+                border: 1px solid {C.BORDER}; border-radius: 6px;
+            }}
+        """)
+        lay = QVBoxLayout(self); lay.setContentsMargins(14, 10, 14, 10); lay.setSpacing(6)
+
+        hdr = QHBoxLayout(); hdr.setSpacing(8)
+        hl = QLabel(title)
+        hl.setFont(QFont("Consolas", 9, QFont.Weight.Bold))
+        hl.setStyleSheet(f"color: {C.PRI}; background: transparent; letter-spacing: 2px;")
+        hdr.addWidget(hl)
+        if subtitle:
+            sl = QLabel(subtitle)
+            sl.setFont(QFont("Consolas", 7))
+            sl.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
+            hdr.addWidget(sl)
+        hdr.addStretch()
+        lay.addLayout(hdr)
+        self._lay = lay
+
+    def add_widget(self, w):
+        self._lay.addWidget(w)
+
+    def add_layout(self, l):
+        self._lay.addLayout(l)
+
+    def add_spacing(self, px=4):
+        self._lay.addSpacing(px)
+
+
 class SettingsOverlay(QWidget):
     done = pyqtSignal()
 
@@ -930,10 +1018,10 @@ class SettingsOverlay(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
-        # header row with title + close button
+        # ── header ──
         hdr = QHBoxLayout(); hdr.setContentsMargins(18, 10, 12, 4)
         title = QLabel("EINSTELLUNGEN")
-        title.setFont(QFont("Consolas", 13, QFont.Weight.Bold))
+        title.setFont(QFont("Consolas", 14, QFont.Weight.Bold))
         title.setStyleSheet(f"color: {C.TEXT}; background: transparent; letter-spacing: 3px;")
         hdr.addWidget(title)
         hdr.addStretch()
@@ -942,10 +1030,8 @@ class SettingsOverlay(QWidget):
         close_btn.setFont(QFont("Consolas", 10, QFont.Weight.Bold))
         close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         close_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent; color: {C.RED};
-                border: 1px solid {C.RED}; border-radius: 3px;
-            }}
+            QPushButton {{ background: transparent; color: {C.RED};
+                border: 1px solid {C.RED}; border-radius: 3px; }}
             QPushButton:hover {{ background: {C.RED}22; }}
         """)
         close_btn.clicked.connect(self.close)
@@ -955,65 +1041,71 @@ class SettingsOverlay(QWidget):
         sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
         sep.setStyleSheet(f"color: {C.BORDER};"); main_layout.addWidget(sep)
 
-        # scroll area for content
+        # ── helpers ──
+        def _inp(ph="", val="", h=28):
+            e = QLineEdit(val)
+            e.setPlaceholderText(ph)
+            e.setFont(QFont("Consolas", 10))
+            e.setFixedHeight(h)
+            e.setStyleSheet(f"""
+                QLineEdit {{ background: #000d12; color: {C.TEXT};
+                    border: 1px solid {C.BORDER}; border-radius: 3px; padding: 2px 8px; }}
+                QLineEdit:focus {{ border: 1px solid {C.PRI}; }}
+                QLineEdit:disabled {{ color: {C.TEXT_DIM}; }}
+            """)
+            return e
+
+        def _btn(txt, color=C.PRI, h=28):
+            b = QPushButton(txt)
+            b.setFont(QFont("Consolas", 9, QFont.Weight.Bold))
+            b.setFixedHeight(h)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setStyleSheet(f"""
+                QPushButton {{ background: transparent; color: {color};
+                    border: 1px solid {color}; border-radius: 3px; }}
+                QPushButton:hover {{ background: {color}22; }}
+            """)
+            return b
+
+        def _cb(txt, checked=False):
+            c = QCheckBox(txt)
+            c.setChecked(checked)
+            c.setFont(QFont("Consolas", 9))
+            c.setStyleSheet(f"""
+                QCheckBox {{ color: {C.TEXT}; background: transparent; spacing: 8px; }}
+                QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {C.BORDER};
+                    border-radius: 2px; background: #000d12; }}
+                QCheckBox::indicator:checked {{ background: {C.PRI}; border: 1px solid {C.PRI}; }}
+            """)
+            return c
+
+        # ── scroll area ──
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
 
-        scroll_content = QWidget()
-        scroll_content.setStyleSheet("background: transparent;")
-        layout = QVBoxLayout(scroll_content)
-        layout.setContentsMargins(18, 8, 18, 8)
-        layout.setSpacing(4)
+        c = QWidget()
+        c.setStyleSheet("background: transparent;")
+        lay = QVBoxLayout(c)
+        lay.setContentsMargins(16, 8, 16, 8)
+        lay.setSpacing(10)
 
-        def _lbl(txt, fs=11, bold=False, color=C.PRI):
-            w = QLabel(txt)
-            w.setFont(QFont("Consolas", fs, QFont.Weight.Bold if bold else QFont.Weight.Normal))
-            w.setStyleSheet(f"color: {color}; background: transparent;")
-            return w
+        # ════════════════════════════════════
+        # 1  PERSON
+        # ════════════════════════════════════
+        card = _SectionCard("PERSON", "Anrede, Standort")
+        self._name_inp = _inp("Anrede / Name (z.B. Sir, Joel)", cfg.get("user_name", "Sir"))
+        card.add_widget(self._name_inp)
+        self._loc_inp = _inp("Wohnort (z.B. Lebach, Deutschland)", cfg.get("home_location", ""))
+        card.add_widget(self._loc_inp)
+        lay.addWidget(card)
 
-        def _inp(ph="", val=""):
-            e = QLineEdit(val)
-            e.setPlaceholderText(ph)
-            e.setFont(QFont("Consolas", 10))
-            e.setFixedHeight(28)
-            e.setStyleSheet(f"""
-                QLineEdit {{
-                    background: #000d12; color: {C.TEXT};
-                    border: 1px solid {C.BORDER}; border-radius: 3px; padding: 2px 6px;
-                }}
-                QLineEdit:focus {{ border: 1px solid {C.PRI}; }}
-            """)
-            return e
-
-        def _btn(txt, color=C.PRI):
-            b = QPushButton(txt)
-            b.setFont(QFont("Consolas", 9, QFont.Weight.Bold))
-            b.setFixedHeight(28)
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setStyleSheet(f"""
-                QPushButton {{
-                    background: transparent; color: {color};
-                    border: 1px solid {color}; border-radius: 3px;
-                }}
-                QPushButton:hover {{ background: {color}22; }}
-            """)
-            return b
-
-        # ───── user name ─────
-        layout.addWidget(_lbl("ANREDE / NAME", 9, color=C.TEXT_DIM))
-        self._name_inp = _inp("Sir", cfg.get("user_name", "Sir"))
-        layout.addWidget(self._name_inp)
-        layout.addSpacing(4)
-
-        sep2 = QFrame(); sep2.setFrameShape(QFrame.Shape.HLine)
-        sep2.setStyleSheet(f"color: {C.BORDER};"); layout.addWidget(sep2)
-        layout.addSpacing(4)
-
-        # ───── email accounts ─────
-        layout.addWidget(_lbl("E-MAIL-KONTEN", 9, color=C.TEXT_DIM))
-        self._email_layout = QVBoxLayout(); self._email_layout.setSpacing(6)
+        # ════════════════════════════════════
+        # 2  E-MAIL
+        # ════════════════════════════════════
+        card = _SectionCard("E-MAIL", "Konten + täglicher Bericht")
+        self._email_layout = QVBoxLayout(); self._email_layout.setSpacing(4)
         self._email_rows = []
         accounts = cfg.get("email_accounts", [])
         for acct in (accounts if accounts else [{}]):
@@ -1022,20 +1114,81 @@ class SettingsOverlay(QWidget):
                 acct.get("imap_server","imap.gmail.com"), acct.get("smtp_server","smtp.gmail.com"),
                 str(acct.get("smtp_port", 587))
             )
-        layout.addLayout(self._email_layout)
+        card.add_layout(self._email_layout)
         add_em = _btn("+ E-Mail-Konto", C.GREEN)
         add_em.clicked.connect(lambda: self._add_email_row("","","","","","587"))
-        layout.addWidget(add_em)
-        layout.addSpacing(4)
+        card.add_widget(add_em)
+        card.add_spacing(4)
 
-        sep3 = QFrame(); sep3.setFrameShape(QFrame.Shape.HLine)
-        sep3.setStyleSheet(f"color: {C.BORDER};"); layout.addWidget(sep3)
-        layout.addSpacing(4)
+        # daily report sub-section
+        dr = cfg.get("daily_report", {})
+        self._dr_enabled = _cb("Täglichen E-Mail-Bericht senden", dr.get("enabled", True))
+        card.add_widget(self._dr_enabled)
 
-        # ───── knowledge sites ─────
-        layout.addWidget(_lbl("WISSENSSEITEN", 9, color=C.TEXT_DIM))
-        layout.addWidget(_lbl("Domain + Login + Seiten zum Durchsuchen", 6, color=C.TEXT_DIM))
-        self._site_layout = QVBoxLayout(); self._site_layout.setSpacing(6)
+        dr_row = QHBoxLayout(); dr_row.setSpacing(6)
+        self._dr_recipient = _inp("Empfänger (E-Mail)", dr.get("recipient_email", ""))
+        dr_row.addWidget(self._dr_recipient, stretch=3)
+        self._dr_times = _inp("Zeiten (z.B. 08:00 13:00 18:00 23:00)",
+                              " ".join(dr.get("times", ["08:00","13:00","18:00","23:00"])))
+        dr_row.addWidget(self._dr_times, stretch=2)
+        card.add_layout(dr_row)
+
+        incl_row = QHBoxLayout(); incl_row.setSpacing(12)
+        self._dr_inc_dash = _cb("Dashboard", dr.get("include_dashboard", True))
+        self._dr_inc_wthr = _cb("Wetter", dr.get("include_weather", True))
+        self._dr_inc_eml = _cb("E-Mails", dr.get("include_emails", True))
+        incl_row.addWidget(self._dr_inc_dash)
+        incl_row.addWidget(self._dr_inc_wthr)
+        incl_row.addWidget(self._dr_inc_eml)
+        incl_row.addStretch()
+        card.add_layout(incl_row)
+        self._email_forward_to = _inp("Weiterleitung (eingehende Mails im Autopilot)", cfg.get("email_forward_to", ""))
+        card.add_widget(self._email_forward_to)
+        card.add_spacing(4)
+        self._default_sender = _inp("Standard-Absender (Name des E-Mail-Kontos)", cfg.get("default_sender", ""))
+        card.add_widget(self._default_sender)
+        lay.addWidget(card)
+
+        # ════════════════════════════════════
+        # 3  ADMIN-API + JDS
+        # ════════════════════════════════════
+        card = _SectionCard("JOEL-DIGITALS.DE", "Admin-API + JDS CRM")
+        self._admin_secret = _inp("Admin-API-Secret", cfg.get("admin_api_secret", ""))
+        self._admin_secret.setEchoMode(QLineEdit.EchoMode.Password)
+        card.add_widget(self._admin_secret)
+
+        jds_cfg = cfg.get("jds_config", {})
+        self._jds_url = _inp("JDS Basis-URL", jds_cfg.get("base_url", ""))
+        jds_r = QHBoxLayout(); jds_r.setSpacing(6)
+        self._jds_team = _inp("Team-Code", jds_cfg.get("team_code", ""))
+        self._jds_token = _inp("API-Token", jds_cfg.get("api_token", ""))
+        self._jds_token.setEchoMode(QLineEdit.EchoMode.Password)
+        jds_r.addWidget(self._jds_team, stretch=1)
+        jds_r.addWidget(self._jds_token, stretch=2)
+        card.add_widget(self._jds_url)
+        card.add_layout(jds_r)
+        self._jds_task_user = _inp("JDS User-ID für JARVIS-Aufgaben", jds_cfg.get("task_user_id", ""))
+        card.add_widget(self._jds_task_user)
+        lay.addWidget(card)
+
+        # ════════════════════════════════════
+        # 4  DISCORD
+        # ════════════════════════════════════
+        card = _SectionCard("DISCORD", "Bot-Integration")
+        disc = cfg.get("discord_config", {})
+        self._discord_token = _inp("Bot-Token", disc.get("bot_token", ""))
+        self._discord_token.setEchoMode(QLineEdit.EchoMode.Password)
+        self._discord_channels = _inp("Kanal-IDs (Leerzeichen-getrennt)",
+                                       " ".join(disc.get("allowed_channels", [])))
+        card.add_widget(self._discord_token)
+        card.add_widget(self._discord_channels)
+        lay.addWidget(card)
+
+        # ════════════════════════════════════
+        # 5  WISSENSSEITEN
+        # ════════════════════════════════════
+        card = _SectionCard("WISSENSSEITEN", "Domains + Logins zum Durchsuchen")
+        self._site_layout = QVBoxLayout(); self._site_layout.setSpacing(4)
         self._site_rows = []
         sites = cfg.get("knowledge_sites", [])
         for site in (sites if sites else [{}]):
@@ -1044,73 +1197,21 @@ class SettingsOverlay(QWidget):
                 site.get("login_path",""), site.get("username",""),
                 site.get("password",""), site.get("pages", [])
             )
-        layout.addLayout(self._site_layout)
+        card.add_layout(self._site_layout)
         add_site = _btn("+ Wissensseite", C.ACC2)
         add_site.clicked.connect(lambda: self._add_site_row("","","","","",[]))
-        layout.addWidget(add_site)
-        layout.addSpacing(4)
+        card.add_widget(add_site)
+        lay.addWidget(card)
 
-        sep4 = QFrame(); sep4.setFrameShape(QFrame.Shape.HLine)
-        sep4.setStyleSheet(f"color: {C.BORDER};"); layout.addWidget(sep4)
-        layout.addSpacing(4)
-
-        # ───── JDS (CRM-System) ─────
-        layout.addWidget(_lbl("JDS CRM-SYSTEM", 9, color=C.TEXT_DIM))
-        jds_cfg = cfg.get("jds_config", {})
-        self._jds_url = _inp("Basis-URL (z.B. https://jds.example.com)", jds_cfg.get("base_url", ""))
-        self._jds_team = _inp("Team-Code", jds_cfg.get("team_code", ""))
-        self._jds_token = _inp("API-Token", jds_cfg.get("api_token", ""))
-        self._jds_token.setEchoMode(QLineEdit.EchoMode.Password)
-        layout.addWidget(self._jds_url)
-        layout.addWidget(self._jds_team)
-        layout.addWidget(self._jds_token)
-        layout.addSpacing(4)
-
-        sep4b = QFrame(); sep4b.setFrameShape(QFrame.Shape.HLine)
-        sep4b.setStyleSheet(f"color: {C.BORDER};"); layout.addWidget(sep4b)
-        layout.addSpacing(6)
-
-        # ───── Joel-Digitals Admin-API ─────
-        sep4e = QFrame(); sep4e.setFrameShape(QFrame.Shape.HLine)
-        sep4e.setStyleSheet(f"color: {C.BORDER};")
-        layout.addWidget(sep4e)
-        layout.addSpacing(4)
-        layout.addWidget(_lbl("JOEL-DIGITALS ADMIN-API", 9, color=C.TEXT_DIM))
-        layout.addWidget(_lbl("Für Morgen-Briefing: Bestellungen, Termine, Tickets, Blog", 6, color=C.TEXT_DIM))
-        self._admin_secret = _inp("Admin-API-Secret", cfg.get("admin_api_secret", ""))
-        self._admin_secret.setEchoMode(QLineEdit.EchoMode.Password)
-        layout.addWidget(self._admin_secret)
-        layout.addSpacing(4)
-
-        # ───── Home / Standort ─────
-        sep4c = QFrame(); sep4c.setFrameShape(QFrame.Shape.HLine)
-        sep4c.setStyleSheet(f"color: {C.BORDER};")
-        layout.addWidget(sep4c)
-        layout.addSpacing(4)
-        layout.addWidget(_lbl("STANDORT", 9, color=C.TEXT_DIM))
-        self._loc_inp = _inp("Stadt/Adresse (z.B. Berlin, Deutschland)", cfg.get("home_location", ""))
-        layout.addWidget(self._loc_inp)
-        layout.addSpacing(4)
-
-        # ───── Discord Bot ─────
-        sep4d = QFrame(); sep4d.setFrameShape(QFrame.Shape.HLine)
-        sep4d.setStyleSheet(f"color: {C.BORDER};")
-        layout.addWidget(sep4d)
-        layout.addSpacing(4)
-        layout.addWidget(_lbl("DISCORD-BOT", 9, color=C.TEXT_DIM))
-        disc = cfg.get("discord_config", {})
-        self._discord_token = _inp("Bot-Token", disc.get("bot_token", ""))
-        self._discord_token.setEchoMode(QLineEdit.EchoMode.Password)
-        self._discord_channels = _inp("Erlaubte Kanal-IDs (durch Leerzeichen trennen)", " ".join(disc.get("allowed_channels", [])))
-        layout.addWidget(self._discord_token)
-        layout.addWidget(self._discord_channels)
-        layout.addSpacing(6)
-
-        save_btn = _btn("▸  SPEICHERN", C.PRI)
+        # ════════════════════════════════════
+        # SAVE
+        # ════════════════════════════════════
+        save_btn = _btn("▸  SPEICHERN", C.PRI, h=34)
+        save_btn.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
         save_btn.clicked.connect(self._save)
-        layout.addWidget(save_btn)
+        lay.addWidget(save_btn)
 
-        scroll.setWidget(scroll_content)
+        scroll.setWidget(c)
         main_layout.addWidget(scroll, stretch=1)
 
     # ───── email helpers ─────
@@ -1275,6 +1376,7 @@ class SettingsOverlay(QWidget):
             "base_url": self._jds_url.text().strip(),
             "team_code": self._jds_team.text().strip(),
             "api_token": self._jds_token.text().strip(),
+            "task_user_id": self._jds_task_user.text().strip(),
         }
         cfg["jds_config"] = jds
 
@@ -1284,12 +1386,29 @@ class SettingsOverlay(QWidget):
             legacy_jds = SETTINGS_BASE / "jds_config.json"
             legacy_jds.write_text(json.dumps(jds, indent=2), encoding="utf-8")
 
+        cfg["default_sender"] = self._default_sender.text().strip()
+
+        # ───── E-Mail forward ─────
+        cfg["email_forward_to"] = self._email_forward_to.text().strip()
+
         # ───── Discord config ─────
         raw_channels = self._discord_channels.text().strip()
         channels = [c.strip() for c in raw_channels.split() if c.strip()]
         cfg["discord_config"] = {
             "bot_token": self._discord_token.text().strip(),
             "allowed_channels": channels,
+        }
+
+        # ───── Daily report ─────
+        raw_times = self._dr_times.text().strip()
+        times = [t.strip() for t in raw_times.split() if t.strip()]
+        cfg["daily_report"] = {
+            "enabled": self._dr_enabled.isChecked(),
+            "recipient_email": self._dr_recipient.text().strip(),
+            "times": times,
+            "include_dashboard": self._dr_inc_dash.isChecked(),
+            "include_weather": self._dr_inc_wthr.isChecked(),
+            "include_emails": self._dr_inc_eml.isChecked(),
         }
 
         save(cfg)
@@ -1437,46 +1556,54 @@ class MainWindow(QMainWindow):
 
     def _build_header(self) -> QWidget:
         w = QWidget()
-        w.setFixedHeight(60)
+        w.setFixedHeight(54)
         w.setStyleSheet(f"background: {C.DARK}; border-bottom: 1px solid {C.BORDER_B};")
         lay = QHBoxLayout(w)
-        lay.setContentsMargins(16, 4, 16, 4)
+        lay.setContentsMargins(14, 4, 14, 4)
 
-        def _badge(txt, color=C.TEXT_MED):
+        def _badge(txt, color, bold=False, sz=8):
             l = QLabel(txt)
-            l.setFont(QFont("Consolas", 8))
-            l.setStyleSheet(f"color: {color}; background: transparent;")
+            l.setFont(QFont("Consolas", sz, QFont.Weight.Bold if bold else QFont.Weight.Normal))
+            l.setStyleSheet(f"color: {color}; background: transparent; letter-spacing: 1px;")
             return l
 
-        left = QVBoxLayout(); left.setSpacing(1)
-        left.addWidget(_badge("JOEL DIGITALS", C.PRI_DIM))
-        left.addWidget(_badge("v2.0", C.TEXT_DIM))
+        left = QVBoxLayout(); left.setSpacing(0)
+        left.addWidget(_badge("◆ JOEL DIGITALS", C.PRI, bold=True, sz=9))
+        left.addWidget(_badge("KI-ASSISTENT v2.0", C.TEXT_DIM, sz=7))
         lay.addLayout(left)
         lay.addStretch()
 
-        mid = QVBoxLayout(); mid.setSpacing(1)
+        mid = QVBoxLayout(); mid.setSpacing(0)
         title = QLabel("JARVIS")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setFont(QFont("Consolas", 20, QFont.Weight.Bold))
-        title.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        title.setFont(QFont("Consolas", 22, QFont.Weight.Bold))
+        title.setStyleSheet(f"color: {C.PRI}; background: transparent; letter-spacing: 3px;")
         mid.addWidget(title)
-        sub = QLabel("Joel Digitals · KI-Assistent")
+        sub = QLabel("JOEL DIGITALS · KI-ASSISTENT")
         sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sub.setFont(QFont("Consolas", 8))
-        sub.setStyleSheet(f"color: {C.PRI_DIM}; background: transparent;")
+        sub.setFont(QFont("Consolas", 7))
+        sub.setStyleSheet(f"color: {C.PRI_DIM}; background: transparent; letter-spacing: 2px;")
         mid.addWidget(sub)
         lay.addLayout(mid)
         lay.addStretch()
 
-        right_col = QVBoxLayout(); right_col.setSpacing(2)
-        self._clock_lbl = QLabel("00:00:00")
-        self._clock_lbl.setFont(QFont("Consolas", 16, QFont.Weight.Bold))
-        self._clock_lbl.setStyleSheet(f"color: {C.WHITE}; background: transparent;")
+        # auto-pilot indicator
+        self._ap_lbl = QLabel("")
+        self._ap_lbl.setFont(QFont("Consolas", 7, QFont.Weight.Bold))
+        self._ap_lbl.setStyleSheet(f"color: {C.ACC2}; background: transparent; letter-spacing: 1px; padding-right: 8px;")
+        self._ap_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+        self._ap_lbl.setFixedWidth(60)
+        lay.addWidget(self._ap_lbl)
+
+        right_col = QVBoxLayout(); right_col.setSpacing(0)
+        self._clock_lbl = QLabel("00:00")
+        self._clock_lbl.setFont(QFont("Consolas", 20, QFont.Weight.Bold))
+        self._clock_lbl.setStyleSheet(f"color: {C.WHITE}; background: transparent; letter-spacing: 2px;")
         self._clock_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
         right_col.addWidget(self._clock_lbl)
         self._date_lbl = QLabel("")
-        self._date_lbl.setFont(QFont("Consolas", 8))
-        self._date_lbl.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
+        self._date_lbl.setFont(QFont("Consolas", 7))
+        self._date_lbl.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent; letter-spacing: 1px;")
         self._date_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
         right_col.addWidget(self._date_lbl)
         lay.addLayout(right_col)
@@ -1494,15 +1621,22 @@ class MainWindow(QMainWindow):
         lay.setContentsMargins(8, 10, 8, 10)
         lay.setSpacing(6)
 
-        hdr = QLabel("SYSTEM")
-        hdr.setFont(QFont("Consolas", 9, QFont.Weight.Bold))
+        # accent bar
+        ab = QFrame()
+        ab.setFixedHeight(2)
+        ab.setStyleSheet(f"background: qlineargradient(x1:0,y1:0,x2:1,y2:0, "
+                         f"stop:0 {C.PRI}, stop:0.5 {C.ACC}, stop:1 {C.GREEN}); "
+                         f"border: none; border-radius: 1px;")
+        lay.addWidget(ab)
+
+        hdr = QLabel("SYSTEMMONITOR")
+        hdr.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
         hdr.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent; "
-                          f"border-bottom: 1px solid {C.BORDER}; padding-bottom: 4px; letter-spacing: 2px;")
+                          f"padding-bottom: 2px; letter-spacing: 2px;")
         lay.addWidget(hdr)
-        lay.addSpacing(2)
 
         self._bar_cpu = MetricBar("CPU", C.PRI)
-        self._bar_mem = MetricBar("MEM", C.ACC2)
+        self._bar_mem = MetricBar("RAM", C.ACC2)
         self._bar_net = MetricBar("NET", C.GREEN)
         self._bar_gpu = MetricBar("GPU", C.ACC)
         self._bar_tmp = MetricBar("TMP", "#ff6688")
@@ -1511,15 +1645,13 @@ class MainWindow(QMainWindow):
                     self._bar_gpu, self._bar_tmp]:
             lay.addWidget(bar)
 
-        lay.addSpacing(4)
-
         info_panel = QWidget()
         info_panel.setStyleSheet(
             f"background: {C.PANEL2}; border: 1px solid {C.BORDER}; border-radius: 4px;"
         )
         ip_lay = QVBoxLayout(info_panel)
-        ip_lay.setContentsMargins(6, 5, 6, 5)
-        ip_lay.setSpacing(3)
+        ip_lay.setContentsMargins(6, 4, 6, 4)
+        ip_lay.setSpacing(2)
 
         self._uptime_lbl = QLabel("UP  --:--")
         self._uptime_lbl.setFont(QFont("Consolas", 9, QFont.Weight.Bold))
@@ -1527,13 +1659,13 @@ class MainWindow(QMainWindow):
         ip_lay.addWidget(self._uptime_lbl)
 
         self._proc_lbl = QLabel("PROC  --")
-        self._proc_lbl.setFont(QFont("Consolas", 9))
+        self._proc_lbl.setFont(QFont("Consolas", 8))
         self._proc_lbl.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent; border: none;")
         ip_lay.addWidget(self._proc_lbl)
 
         os_name = {"Windows": "WIN", "Darwin": "macOS", "Linux": "LINUX"}.get(_OS, _OS.upper())
         os_lbl = QLabel(f"OS  {os_name}")
-        os_lbl.setFont(QFont("Consolas", 9))
+        os_lbl.setFont(QFont("Consolas", 8))
         os_lbl.setStyleSheet(f"color: {C.ACC2}; background: transparent; border: none;")
         ip_lay.addWidget(os_lbl)
 
@@ -1541,20 +1673,20 @@ class MainWindow(QMainWindow):
         lay.addStretch()
 
         for txt, col in [
-            ("KI AKTIV",    C.GREEN),
-            ("SICHERHEIT\nOK",      C.PRI),
-            ("JOEL\nDIGITALS",   C.ACC),
+            ("◇ KI AKTIV",    C.GREEN),
+            ("◈ SICHERHEIT\n  OK",      C.PRI),
+            ("◆ JOEL\n  DIGITALS",   C.ACC),
         ]:
             lbl = QLabel(txt)
             lbl.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignLeft)
             lbl.setStyleSheet(
                 f"color: {col}; background: {C.PANEL2};"
-                f"border: 1px solid {C.BORDER_A}; border-radius: 3px; padding: 4px;"
+                f"border: 1px solid {C.BORDER}; border-radius: 3px; padding: 5px 8px;"
             )
             lay.addWidget(lbl)
 
-        lay.addSpacing(8)
+        lay.addSpacing(6)
         set_btn = QPushButton("⚙  EINSTELLUNGEN")
         set_btn.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
         set_btn.setFixedHeight(28)
@@ -1566,7 +1698,7 @@ class MainWindow(QMainWindow):
             }}
             QPushButton:hover {{
                 color: {C.PRI}; border: 1px solid {C.PRI_DIM};
-            }}
+                background: {C.PRI_GHO};}}
         """)
         set_btn.clicked.connect(self._open_settings)
         lay.addWidget(set_btn)
@@ -1586,30 +1718,30 @@ class MainWindow(QMainWindow):
             l.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent; letter-spacing: 2px;")
             return l
 
-        lay.addWidget(_sec("AKTIVITÄTSLOG"))
+        def _sep():
+            s = QFrame(); s.setFrameShape(QFrame.Shape.HLine)
+            s.setStyleSheet(f"color: {C.BORDER}; margin: 2px 0;"); return s
+
+        lay.addWidget(_sec("LOG"))
         self._log = LogWidget()
         lay.addWidget(self._log, stretch=1)
 
-        sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(f"color: {C.BORDER}; margin: 2px 0;")
-        lay.addWidget(sep)
+        lay.addWidget(_sep())
 
-        lay.addWidget(_sec("DATEI-UPLOAD"))
+        lay.addWidget(_sec("DATEI"))
         self._drop_zone = FileDropZone()
         self._drop_zone.file_selected.connect(self._on_file_selected)
         lay.addWidget(self._drop_zone)
 
-        self._file_hint = QLabel("Keine Datei geladen — ablegen oder klicken")
-        self._file_hint.setFont(QFont("Consolas", 8))
+        self._file_hint = QLabel("Keine Datei — ablegen oder klicken")
+        self._file_hint.setFont(QFont("Consolas", 7))
         self._file_hint.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
         self._file_hint.setWordWrap(True)
         lay.addWidget(self._file_hint)
 
-        sep2 = QFrame(); sep2.setFrameShape(QFrame.Shape.HLine)
-        sep2.setStyleSheet(f"color: {C.BORDER}; margin: 2px 0;")
-        lay.addWidget(sep2)
+        lay.addWidget(_sep())
 
-        lay.addWidget(_sec("BEFEHLSEINGABE"))
+        lay.addWidget(_sec("BEFEHL"))
         lay.addLayout(self._build_input_row())
 
         self._mute_btn = QPushButton("🎙  MIKROFON AKTIV")
@@ -1620,8 +1752,8 @@ class MainWindow(QMainWindow):
         self._style_mute_btn()
         lay.addWidget(self._mute_btn)
 
-        fs_btn = QPushButton("⛶  VOLLBILD  [F11]")
-        fs_btn.setFixedHeight(26)
+        fs_btn = QPushButton("⛶  [F11]  VOLLBILD")
+        fs_btn.setFixedHeight(24)
         fs_btn.setFont(QFont("Consolas", 8))
         fs_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         fs_btn.setStyleSheet(f"""
@@ -1631,7 +1763,7 @@ class MainWindow(QMainWindow):
             }}
             QPushButton:hover {{
                 color: {C.PRI}; border: 1px solid {C.BORDER_B};
-            }}
+                background: {C.PRI_GHO};}}
         """)
         fs_btn.clicked.connect(self._toggle_fullscreen)
         lay.addWidget(fs_btn)
@@ -1639,15 +1771,15 @@ class MainWindow(QMainWindow):
         return w
 
     def _build_input_row(self) -> QHBoxLayout:
-        row = QHBoxLayout(); row.setSpacing(5)
+        row = QHBoxLayout(); row.setSpacing(4)
         self._input = QLineEdit()
-        self._input.setPlaceholderText("Befehl oder Frage eingeben…")
-        self._input.setFont(QFont("Consolas", 11))
-        self._input.setFixedHeight(30)
+        self._input.setPlaceholderText("Befehl oder Frage…")
+        self._input.setFont(QFont("Consolas", 10))
+        self._input.setFixedHeight(28)
         self._input.setStyleSheet(f"""
             QLineEdit {{
-                background: {C.DARK}; color: {C.WHITE};
-                border: 1px solid {C.BORDER}; border-radius: 4px; padding: 4px 8px;
+                background: #000d12; color: {C.WHITE};
+                border: 1px solid {C.BORDER}; border-radius: 3px; padding: 2px 8px;
             }}
             QLineEdit:focus {{ border: 1px solid {C.PRI}; }}
         """)
@@ -1655,8 +1787,8 @@ class MainWindow(QMainWindow):
         row.addWidget(self._input)
 
         send = QPushButton("▸")
-        send.setFixedSize(30, 30)
-        send.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
+        send.setFixedSize(28, 28)
+        send.setFont(QFont("Consolas", 10, QFont.Weight.Bold))
         send.setCursor(Qt.CursorShape.PointingHandCursor)
         send.setStyleSheet(f"""
             QPushButton {{
@@ -1755,9 +1887,10 @@ class MainWindow(QMainWindow):
             threading.Thread(target=self.on_text_command, args=(txt,), daemon=True).start()
 
     def _apply_state(self, state: str):
-        self.hud.state    = state
-        self.hud.speaking = (state == "SPEAKING")
-        self.hud.update()
+        if state == "SPEAKING":
+            self.hud.speaking = True
+        else:
+            self.hud.set_state(state)
 
     def _check_config(self) -> bool:
         if not API_FILE.exists(): return False
@@ -1854,3 +1987,6 @@ class JarvisUI:
     def stop_speaking(self):
         if not self.muted:
             self.set_state("LISTENING")
+
+    def set_autopilot(self, active: bool):
+        self._win._ap_lbl.setText("AUTOPILOT" if active else "")

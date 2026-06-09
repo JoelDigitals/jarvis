@@ -8,6 +8,7 @@ DEFAULT = {
     "user_name": "Sir",
     "home_location": "",
     "admin_api_secret": "",
+    "default_sender": "",
     "email_accounts": [],
     "knowledge_sites": [],
     "briefing_enabled": True,
@@ -16,10 +17,20 @@ DEFAULT = {
         "base_url": "",
         "team_code": "",
         "api_token": "",
+        "task_user_id": "",
     },
     "discord_config": {
         "bot_token": "",
         "allowed_channels": [],
+    },
+    "email_forward_to": "",
+    "daily_report": {
+        "enabled": True,
+        "recipient_email": "",
+        "times": ["08:00", "13:00", "18:00", "23:00"],
+        "include_dashboard": True,
+        "include_weather": True,
+        "include_emails": True,
     },
 }
 
