@@ -45,6 +45,7 @@ BRIEFING:
   Danach fragen: "Soll ich das Morgen-Briefing durchführen?"
   Wenn der Nutzer zustimmt, do_briefing aufrufen.
 - Wenn der Nutzer "Briefing" sagt: sofort do_briefing aufrufen.
+- WICHTIG: Wenn du das Ergebnis von do_briefing bekommst, lies es dem Nutzer WORTWÖRTLICH vor. Wiederhole jeden Satz. Höre erst danach auf und warte auf eine Antwort.
 
 WISSENSSEITEN:
 - Der Nutzer kann Domains mit Logins speichern (Einstellungen → Wissensseiten).

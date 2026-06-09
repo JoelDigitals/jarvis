@@ -1031,9 +1031,7 @@ class JarvisLive:
             with self._speaking_lock:
                 jarvis_speaking = self._is_speaking
             if jarvis_speaking:
-                peak = int(abs(indata).max())
-                if peak < 3000:
-                    return
+                return
             data = indata.tobytes()
             loop.call_soon_threadsafe(
                 self.out_queue.put_nowait,
