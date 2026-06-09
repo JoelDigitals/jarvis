@@ -17,6 +17,28 @@
     "speaks_german": {
       "value": "asked question in German",
       "updated": "2026-06-09"
+    },
+    "abitur_results_date": {
+      "value": "June 9, 2026",
+      "updated": "2026-06-09"
+    },
+    "hydration_reminder_set": {
+      "value": "Hourly hydration reminder set.",
+      "updated": "2026-06-09"
+    },
+    "laptops_count": {
+      "value": "2",
+      "updated": "2026-06-09"
+    }
+  },
+  "credentials": {
+    "joel_digitals_username": {
+      "value": "JoelDigitals",
+      "updated": "2026-06-09"
+    },
+    "joel_digitals_password": {
+      "value": "Jo240207!",
+      "updated": "2026-06-09"
     }
   }
 }

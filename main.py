@@ -706,7 +706,7 @@ class JarvisLive:
         recent = self._history[-6:]
         lines = ["Letzter Gesprächsverlauf (weiter machen wo wir aufgehört haben):"]
         for h in recent:
-            role = "Du" if h["role"] == "user" else "Du"
+            role = "Du" if h["role"] == "user" else "Jarvis"
             lines.append(f"{role}: {h['text']}")
         lines.append("---")
         return "\n".join(lines)
