@@ -394,18 +394,24 @@ class ChatSession:
 
     def _send_with_retry(self, msg):
         import time
-        for attempt in range(3):
+        import random
+        for attempt in range(5):
             try:
                 return self._chat.send_message(msg)
             except Exception as e:
                 err = str(e)
                 if "429" in err or "RESOURCE_EXHAUSTED" in err:
-                    wait = min(2 ** attempt * 5, 30)
-                    print(f"[JARVIS] ⏳ Rate limit, retry in {wait}s ({attempt+1}/3)")
+                    wait = min(2 ** attempt * 5 + random.uniform(0, 3), 60)
+                    print(f"[JARVIS] ⏳ Rate limit, retry in {wait:.0f}s ({attempt+1}/5)")
+                    time.sleep(wait)
+                    continue
+                if attempt < 2:
+                    wait = 2 ** attempt * 2
+                    print(f"[JARVIS] ⚠️ {err[:80]}, retry in {wait}s ({attempt+1}/5)")
                     time.sleep(wait)
                     continue
                 raise
-        raise Exception("Rate limit exceeded after 3 retries.")
+        raise Exception("Rate limit exceeded after 5 retries.")
 
     def send(self, text: str) -> tuple[str, list[dict]]:
         logs = []

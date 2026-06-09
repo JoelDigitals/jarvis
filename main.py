@@ -1018,12 +1018,21 @@ class JarvisLive:
             try:
                 await self.session.send_realtime_input(media=msg)
             except Exception:
-                self.out_queue.put_nowait(msg)
+                try:
+                    self.out_queue.put_nowait(msg)
+                except asyncio.QueueFull:
+                    pass
                 raise
 
     async def _listen_audio(self):
         print("[JARVIS] 🎤 Mic started")
         loop = asyncio.get_event_loop()
+
+        def _safe_put(data):
+            try:
+                self.out_queue.put_nowait(data)
+            except asyncio.QueueFull:
+                pass
 
         def callback(indata, frames, time_info, status):
             if self.ui.muted:
@@ -1033,10 +1042,10 @@ class JarvisLive:
             if jarvis_speaking:
                 return
             data = indata.tobytes()
-            loop.call_soon_threadsafe(
-                self.out_queue.put_nowait,
-                {"data": data, "mime_type": "audio/pcm"}
-            )
+            try:
+                loop.call_soon_threadsafe(_safe_put, {"data": data, "mime_type": "audio/pcm"})
+            except RuntimeError:
+                pass
 
         try:
             with sd.InputStream(
@@ -1062,7 +1071,10 @@ class JarvisLive:
 
                     if response.data:
                         self.set_speaking(True)
-                        self.audio_in_queue.put_nowait(response.data)
+                        try:
+                            self.audio_in_queue.put_nowait(response.data)
+                        except asyncio.QueueFull:
+                            print("[JARVIS] ⚠️ Audio-Queue voll, überspringe Chunk")
 
                     if response.server_content:
                         sc = response.server_content
