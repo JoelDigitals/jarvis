@@ -100,6 +100,9 @@ def _execute_action(name: str, args: dict) -> str:
         elif name == "do_briefing":
             from actions.briefing_action import do_briefing
             return do_briefing(parameters=args)
+        elif name == "wecker":
+            from actions.wecker import wecker
+            return wecker(parameters=args)
         else:
             return f"Unbekannte Aktion: {name}"
     except Exception as e:
@@ -329,6 +332,20 @@ def _make_tools() -> list[dict]:
                 "type": "OBJECT",
                 "properties": {},
                 "required": []
+            }
+        },
+        {
+            "name": "wecker",
+            "description": "Wecker (Alarm) und Musik-Steuerung. Aktionen: set (stellen), list (anzeigen), remove (entfernen), play (Musik abspielen), stop (Musik stoppen). Musikdateien im music/-Ordner.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "action": {"type": "STRING", "description": "set | list | remove | play | stop"},
+                    "time":   {"type": "STRING", "description": "Uhrzeit HH:MM für set"},
+                    "id":     {"type": "INTEGER", "description": "Wecker-ID für remove"},
+                    "music":  {"type": "STRING", "description": "Musikdatei-Name (optional)"},
+                },
+                "required": ["action"]
             }
         },
     ]

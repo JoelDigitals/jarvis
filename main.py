@@ -670,6 +670,20 @@ TOOL_DECLARATIONS = [
             "required": ["action"]
         }
     },
+    {
+        "name": "wecker",
+        "description": "Wecker (Alarm) und Musik-Steuerung. Aktionen: set (stellen), list (anzeigen), remove (entfernen), play (Musik abspielen), stop (Musik stoppen). Musikdateien im music/-Ordner.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {"type": "STRING", "description": "set | list | remove | play | stop"},
+                "time":   {"type": "STRING", "description": "Uhrzeit HH:MM für set"},
+                "id":     {"type": "INTEGER", "description": "Wecker-ID für remove"},
+                "music":  {"type": "STRING", "description": "Musikdatei-Name (optional)"},
+            },
+            "required": ["action"]
+        }
+    },
 ]
 
 
@@ -950,6 +964,11 @@ class JarvisLive:
                 r = await loop.run_in_executor(None, lambda: admin_action(parameters=args, player=self.ui))
                 result = r or "Done."
 
+            elif name == "wecker":
+                from actions.wecker import wecker
+                r = await loop.run_in_executor(None, lambda: wecker(parameters=args, player=self.ui))
+                result = r or "Done."
+
             elif name == "do_briefing":
                 from actions.briefing_action import do_briefing
                 r = await loop.run_in_executor(None, lambda: do_briefing(parameters=args, player=self.ui))
@@ -1085,6 +1104,7 @@ class JarvisLive:
         except Exception as e:
             print(f"[JARVIS] ❌ Recv: {e}")
             traceback.print_exc()
+            raise
 
     async def _play_audio(self):
         print("[JARVIS] 🔊 Play started")
@@ -1219,6 +1239,8 @@ class JarvisLive:
                     self._connect_jds()
                     self._auto_setup_email()
                     self._start_discord()
+                    from actions.wecker import schedule_all
+                    schedule_all()
 
                     tg.create_task(self._send_realtime())
                     tg.create_task(self._listen_audio())
