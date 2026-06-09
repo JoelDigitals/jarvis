@@ -714,13 +714,16 @@ class JarvisLive:
     def _on_text_command(self, text: str):
         if not self._loop or not self.session:
             return
-        asyncio.run_coroutine_threadsafe(
-            self.session.send_client_content(
-                turns={"parts": [{"text": text}]},
-                turn_complete=True
-            ),
-            self._loop
-        )
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.session.send_client_content(
+                    turns={"parts": [{"text": text}]},
+                    turn_complete=True
+                ),
+                self._loop
+            )
+        except RuntimeError:
+            pass
 
     def _forward_response(self, text: str):
         for q in self._response_queues:
@@ -755,13 +758,16 @@ class JarvisLive:
     def speak(self, text: str):
         if not self._loop or not self.session:
             return
-        asyncio.run_coroutine_threadsafe(
-            self.session.send_client_content(
-                turns={"parts": [{"text": text}]},
-                turn_complete=True
-            ),
-            self._loop
-        )
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.session.send_client_content(
+                    turns={"parts": [{"text": text}]},
+                    turn_complete=True
+                ),
+                self._loop
+            )
+        except RuntimeError:
+            pass
 
     def speak_error(self, tool_name: str, error: str):
         short = str(error)[:120]
@@ -1014,7 +1020,13 @@ class JarvisLive:
 
     async def _send_realtime(self):
         while True:
-            msg = await self.out_queue.get()
+            try:
+                msg = await self.out_queue.get()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                await asyncio.sleep(0.1)
+                continue
             try:
                 await self.session.send_realtime_input(media=msg)
             except Exception:
@@ -1294,8 +1306,11 @@ class JarvisLive:
                 print(f"[JARVIS] ⚠️ {e}")
                 traceback.print_exc()
 
-            self.set_speaking(False)
-            self.ui.set_state("THINKING")
+            try:
+                self.set_speaking(False)
+                self.ui.set_state("THINKING")
+            except Exception:
+                pass
             print("[JARVIS] 🔄 Reconnecting in 3s...")
             await asyncio.sleep(3)
 
