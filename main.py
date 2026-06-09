@@ -698,8 +698,18 @@ class JarvisLive:
         self._is_speaking   = False
         self._speaking_lock = threading.Lock()
         self._response_queues: list[asyncio.Queue[str]] = []
+        self._history: list[dict] = []
         self._discord = None
         self.ui.on_text_command = self._on_text_command
+
+    def _build_context(self) -> str:
+        recent = self._history[-6:]
+        lines = ["Letzter Gesprächsverlauf (weiter machen wo wir aufgehört haben):"]
+        for h in recent:
+            role = "Du" if h["role"] == "user" else "Du"
+            lines.append(f"{role}: {h['text']}")
+        lines.append("---")
+        return "\n".join(lines)
 
     def _on_text_command(self, text: str):
         if not self._loop or not self.session:
@@ -1005,7 +1015,11 @@ class JarvisLive:
     async def _send_realtime(self):
         while True:
             msg = await self.out_queue.get()
-            await self.session.send_realtime_input(media=msg)
+            try:
+                await self.session.send_realtime_input(media=msg)
+            except Exception:
+                self.out_queue.put_nowait(msg)
+                raise
 
     async def _listen_audio(self):
         print("[JARVIS] 🎤 Mic started")
@@ -1071,12 +1085,15 @@ class JarvisLive:
                             full_in = " ".join(in_buf).strip()
                             if full_in:
                                 self.ui.write_log(f"Du: {full_in}")
+                                self._history.append({"role": "user", "text": full_in})
                             in_buf = []
 
                             full_out = " ".join(out_buf).strip()
                             if full_out:
                                 self.ui.write_log(f"Jarvis: {full_out}")
                                 self._forward_response(full_out)
+                                self._history.append({"role": "model", "text": full_out})
+
                             out_buf = []
 
                             if full_in and len(full_in) > 5:
@@ -1240,6 +1257,16 @@ class JarvisLive:
                     print("[JARVIS] ✅ Connected.")
                     self.ui.set_state("LISTENING")
                     self.ui.write_log("SYS: JARVIS bereit.")
+
+                    if self._history:
+                        context = self._build_context()
+                        if context:
+                            await session.send_client_content(
+                                turns={"parts": [{"text": context}]},
+                                turn_complete=True
+                            )
+                            print(f"[JARVIS] 📜 Context restored ({len(self._history)} turns)")
+
                     self._setup_hourly_reminder()
                     self._connect_jds()
                     self._auto_setup_email()
