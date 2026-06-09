@@ -67,12 +67,14 @@ def action_dashboard() -> str:
     if not r.get("ok"):
         return r.get("error", "Fehler")
     d = r["data"]
+    order_counts = d.get("order_counts", {})
+    pending_orders = sum(1 for s, c in order_counts.items() if s.lower() in ("pending", "new"))
     lines = [
-        "📊 Joel-Digitals Dashboard:",
-        f"  Termine: {d.get('appointments', {}).get('pending', 0)} offen, {d.get('appointments', {}).get('today', 0)} heute",
-        f"  Blog: {d.get('blog_views', 0)} Views, {d.get('blog_posts', 0)} Posts",
-        f"  Tickets: {d.get('open_tickets', 0)} offen",
-        f"  Bestellungen: {d.get('orders', {}).get('pending', 0)} offen, {d.get('orders', {}).get('shipped', 0)} versandt",
+        "Joel-Digitals Dashboard:",
+        f"  Termine: {len(d.get('appointments_upcoming', []))} anstehend",
+        f"  Blog: {d.get('blog_views_total', 0)} Views, {d.get('blog_posts_total', 0)} Posts",
+        f"  Tickets: {d.get('support_open_tickets', 0)} offen",
+        f"  Bestellungen: {d.get('orders_total', 0)} gesamt, {pending_orders} offen",
     ]
     return "\n".join(lines)
 
@@ -80,31 +82,35 @@ def action_appointments(status: str = "") -> str:
     r = _get("/appointments/")
     if not r.get("ok"):
         return r.get("error", "Fehler")
-    apps = r["data"]
-    if isinstance(apps, dict):
-        apps = apps.get("results", apps.get("appointments", []))
-    if not apps:
+    d = r["data"]
+    all_apps = []
+    for key in ("pending", "accepted", "confirmed"):
+        for a in d.get(key, []):
+            a["_status"] = key
+            all_apps.append(a)
+    if not all_apps:
         return "Keine Termine gefunden."
-    lines = ["📅 Termine:"]
-    for a in (apps if isinstance(apps, list) else [apps]):
-        if status and a.get("status") != status:
+    lines = ["Termine:"]
+    for a in all_apps:
+        if status and a["_status"] != status:
             continue
-        date = a.get("date", "?")[:10]
-        time = a.get("time", "?")[:5]
-        name = a.get("name", a.get("customer", "?"))
-        lines.append(f"  {date} {time} — {name} [{a.get('status', '?')}]")
+        date = (a.get("date") or "?")[:10]
+        time = (a.get("time") or "?")[:5]
+        name = a.get("name", "?")
+        s = a.get("_status", "?")
+        lines.append(f"  {date} {time} — {name} [{s}]")
     return "\n".join(lines) if len(lines) > 1 else "Keine passenden Termine."
 
 def action_confirm_appointment(appointment_id: int) -> str:
     r = _post(f"/appointments/{appointment_id}/confirm/")
     if r.get("ok"):
-        return f"Termin {appointment_id} bestätigt ✅"
+        return f"Termin {appointment_id} bestaetigt"
     return r.get("error", "Fehler")
 
 def action_reject_appointment(appointment_id: int) -> str:
     r = _post(f"/appointments/{appointment_id}/reject/")
     if r.get("ok"):
-        return f"Termin {appointment_id} abgelehnt ❌"
+        return f"Termin {appointment_id} abgelehnt"
     return r.get("error", "Fehler")
 
 def action_blog_stats() -> str:
@@ -113,13 +119,13 @@ def action_blog_stats() -> str:
         return r.get("error", "Fehler")
     d = r["data"]
     lines = [
-        f"📝 Blog: {d.get('total_views', 0)} Views, {d.get('total_posts', 0)} Posts",
+        f"Blog: {d.get('total_views', 0)} Views, {d.get('published_posts', 0)} Posts",
     ]
     top = d.get("top_posts", [])
     if top:
-        lines.append("Top-Beiträge:")
+        lines.append("Top-Beitraege:")
         for i, p in enumerate(top[:10], 1):
-            lines.append(f"  {i}. {p.get('title', '?')} — {p.get('views', 0)} Views")
+            lines.append(f"  {i}. {p.get('title_de', p.get('title', '?'))} — {p.get('views', 0)} Views")
     return "\n".join(lines)
 
 def action_tickets(status: str = "", ticket_id: int = None) -> str:
@@ -130,7 +136,7 @@ def action_tickets(status: str = "", ticket_id: int = None) -> str:
         t = r["data"]
         msgs = t.get("messages", [])
         lines = [
-            f"🎫 Ticket #{ticket_id}: {t.get('subject', '?')}",
+            f"Ticket #{ticket_id}: {t.get('subject', '?')}",
             f"  Status: {t.get('status', '?')}",
         ]
         for m in msgs[-5:]:
@@ -141,16 +147,19 @@ def action_tickets(status: str = "", ticket_id: int = None) -> str:
     r = _get("/support/tickets/")
     if not r.get("ok"):
         return r.get("error", "Fehler")
-    tickets = r["data"]
-    if isinstance(tickets, dict):
-        tickets = tickets.get("results", tickets.get("tickets", []))
-    if not tickets:
+    d = r["data"]
+    all_tickets = []
+    for key in ("open", "recently_resolved", "closed"):
+        for t in d.get(key, []):
+            t["_status"] = key
+            all_tickets.append(t)
+    if not all_tickets:
         return "Keine Tickets."
-    lines = ["🎫 Support-Tickets:"]
-    for t in (tickets if isinstance(tickets, list) else [tickets]):
-        if status and t.get("status") != status:
+    lines = ["Support-Tickets:"]
+    for t in all_tickets:
+        if status and t["_status"] != status:
             continue
-        lines.append(f"  #{t.get('id','?')} {t.get('subject','?')} [{t.get('status','?')}]")
+        lines.append(f"  #{t.get('id','?')} {t.get('subject','?')} [{t['_status']}]")
     return "\n".join(lines)
 
 def action_reply_ticket(ticket_id: int, message: str) -> str:
@@ -158,27 +167,26 @@ def action_reply_ticket(ticket_id: int, message: str) -> str:
         return "Keine Nachricht angegeben."
     r = _post(f"/support/tickets/{ticket_id}/reply/", {"message": message})
     if r.get("ok"):
-        return f"Antwort an Ticket #{ticket_id} gesendet ✅"
+        return f"Antwort an Ticket #{ticket_id} gesendet"
     return r.get("error", "Fehler")
 
 def action_orders(status: str = "") -> str:
     r = _get("/orders/")
     if not r.get("ok"):
         return r.get("error", "Fehler")
-    orders = r["data"]
-    if isinstance(orders, dict):
-        orders = orders.get("results", orders.get("orders", []))
+    d = r["data"]
+    orders = d.get("recent_orders", [])
     if not orders:
         return "Keine Bestellungen."
-    lines = ["📦 Bestellungen:"]
-    for o in (orders if isinstance(orders, list) else [orders]):
-        if status and o.get("status") != status:
+    lines = ["Bestellungen:"]
+    for o in orders:
+        if status and o.get("status", "").lower() != status.lower():
             continue
-        date = (o.get("date") or o.get("created_at") or "?")[:10]
-        customer = o.get("customer", o.get("name", "?"))
-        total = o.get("total", o.get("amount", "?"))
-        lines.append(f"  {date} — {customer} — {total}€ [{o.get('status', '?')}]")
-    return "\n".join(lines)
+        date = (o.get("created_at") or "?")[:10]
+        name = f"{o.get('first_name', '')} {o.get('last_name', '')}".strip() or "?"
+        total = o.get("total_amount", "?")
+        lines.append(f"  {date} — {name} — {total} EUR [{o.get('status', '?')}]")
+    return "\n".join(lines) if len(lines) > 1 else "Keine passenden Bestellungen."
 
 def admin_action(parameters: dict, player=None) -> str:
     action = (parameters.get("action") or "dashboard").strip().lower()
