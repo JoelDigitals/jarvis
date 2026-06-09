@@ -1012,14 +1012,19 @@ class JarvisLive:
         loop = asyncio.get_event_loop()
 
         def callback(indata, frames, time_info, status):
+            if self.ui.muted:
+                return
             with self._speaking_lock:
                 jarvis_speaking = self._is_speaking
-            if not jarvis_speaking and not self.ui.muted:
-                data = indata.tobytes()
-                loop.call_soon_threadsafe(
-                    self.out_queue.put_nowait,
-                    {"data": data, "mime_type": "audio/pcm"}
-                )
+            if jarvis_speaking:
+                peak = int(abs(indata).max())
+                if peak < 3000:
+                    return
+            data = indata.tobytes()
+            loop.call_soon_threadsafe(
+                self.out_queue.put_nowait,
+                {"data": data, "mime_type": "audio/pcm"}
+            )
 
         try:
             with sd.InputStream(

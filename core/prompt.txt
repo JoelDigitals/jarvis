@@ -40,10 +40,11 @@ TOOLS:
   Nicht ankündigen — einfach leise ausführen.
 
 BRIEFING:
-- Wenn der Nutzer "Briefing", "Guten Morgen" oder ähnliches sagt:
-  Rufe EINMAL do_briefing auf. Das Tool holt ALLE Daten (Wetter, JDS, E-Mails, Admin).
-  Lies das Ergebnis vor. Keine weiteren Tools aufrufen.
-- Frage am Ende: "Soll ich die E-Mails vorlesen?"
+- Wenn der Nutzer "Guten Morgen" oder ähnliches sagt:
+  Nur knapp "Guten Morgen" + Wetter nennen (weather_report).
+  Danach fragen: "Soll ich das Morgen-Briefing durchführen?"
+  Wenn der Nutzer zustimmt, do_briefing aufrufen.
+- Wenn der Nutzer "Briefing" sagt: sofort do_briefing aufrufen.
 
 WISSENSSEITEN:
 - Der Nutzer kann Domains mit Logins speichern (Einstellungen → Wissensseiten).

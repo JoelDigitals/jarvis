@@ -75,7 +75,7 @@ class JDSClient:
             resp = requests.get(
                 f"{self._base_url}/api/v2/info/",
                 headers=self._headers(),
-                timeout=10,
+                timeout=8,
             )
             if resp.status_code == 200:
                 data = resp.json()
@@ -108,7 +108,7 @@ class JDSClient:
                 f"{self._base_url}{endpoint}",
                 headers=self._headers(),
                 params=params,
-                timeout=15,
+                timeout=8,
             )
             if resp.status_code == 200:
                 return {"ok": True, "data": resp.json()}
@@ -124,7 +124,7 @@ class JDSClient:
                 f"{self._base_url}{endpoint}",
                 headers=self._headers(),
                 json=data,
-                timeout=15,
+                timeout=8,
             )
             if resp.status_code in (200, 201):
                 return {"ok": True, "data": resp.json()}
@@ -140,7 +140,7 @@ class JDSClient:
                 f"{self._base_url}{endpoint}",
                 headers=self._headers(),
                 json=data,
-                timeout=15,
+                timeout=8,
             )
             if resp.status_code == 200:
                 return {"ok": True, "data": resp.json()}
@@ -167,7 +167,7 @@ class JDSClient:
             resp = requests.delete(
                 f"{self._base_url}{endpoint}",
                 headers=self._headers(),
-                timeout=15,
+                timeout=8,
             )
             if resp.status_code in (200, 204):
                 return {"ok": True}
