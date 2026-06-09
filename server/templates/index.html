@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>JARVIS</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>J.A.R.V.I.S</h1>
+    <span id="status-dot"></span>
+    <nav>
+      <button class="nav-btn" onclick="toggleSettings()" title="Einstellungen">⚙</button>
+      <button class="nav-btn" onclick="resetChat()" title="Chat zurücksetzen">↺</button>
+    </nav>
+  </header>
+
+  <div id="chat" role="log" aria-live="polite">
+    <div class="msg welcome">
+      <div class="bubble jarvis">JARVIS bereit. Wie kann ich Ihnen helfen?</div>
+    </div>
+  </div>
+
+  <div id="input-area">
+    <button id="voice-btn" onclick="toggleVoice()" title="Spracheingabe" class="voice-btn">🎤</button>
+    <input type="text" id="text-input" placeholder="Nachricht eingeben..." autocomplete="off">
+    <button id="send-btn" onclick="send()" title="Senden">➤</button>
+  </div>
+</div>
+
+<div id="settings-overlay" class="hidden" onclick="closeSettings(event)">
+  <div id="settings-panel" onclick="event.stopPropagation()">
+    <div class="settings-header">
+      <h2>Einstellungen</h2>
+      <button class="close-btn" onclick="toggleSettings()">✕</button>
+    </div>
+    <div class="settings-body">
+      <section>
+        <h3>API-Key</h3>
+        <input type="password" id="s-api-key" placeholder="Gemini API-Key">
+        <button class="btn" onclick="saveApiKey()">Speichern</button>
+      </section>
+      <section>
+        <h3>Anrede</h3>
+        <input type="text" id="s-user-name" placeholder="Sir">
+        <button class="btn" onclick="saveUserName()">Speichern</button>
+      </section>
+      <section>
+        <h3>E-Mail-Konten</h3>
+        <div id="s-email-list"></div>
+        <button class="btn sm" onclick="addEmailRow()">+ Konto</button>
+        <button class="btn sm" onclick="saveEmail()" style="margin-top:4px">E-Mails speichern</button>
+      </section>
+      <section>
+        <h3>JDS CRM</h3>
+        <input type="text" id="s-jds-url" placeholder="Basis-URL">
+        <input type="text" id="s-jds-team" placeholder="Team-Code">
+        <input type="password" id="s-jds-token" placeholder="API-Token">
+        <button class="btn" onclick="saveJDS()">Speichern</button>
+      </section>
+      <section>
+        <h3>Wissensseiten</h3>
+        <div id="s-sites-list"></div>
+        <button class="btn sm" onclick="addSiteRow()">+ Seite</button>
+        <button class="btn sm" onclick="saveSites()" style="margin-top:4px">Seiten speichern</button>
+      </section>
+      <div id="settings-msg" class="msg-success hidden"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

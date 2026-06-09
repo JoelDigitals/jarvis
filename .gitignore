@@ -1,0 +1,29 @@
+# Konfigurationsdateien mit API-Keys, Passwörtern, Zugangsdaten
+config/*.json
+config/__pycache__/
+api keys
+
+# Python Cache (alle Ebenen)
+**/__pycache__/
+*.pyc
+
+# Temporäre Dateien
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Betriebssystem
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log

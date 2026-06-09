@@ -1,0 +1,22 @@
+{
+  "identity": {
+    "email_address": {
+      "value": "info@jl-digitalists.com",
+      "updated": "2026-06-08"
+    },
+    "name": {
+      "value": "Joel",
+      "updated": "2026-06-09"
+    }
+  },
+  "preferences": {},
+  "projects": {},
+  "relationships": {},
+  "wishes": {},
+  "notes": {
+    "speaks_german": {
+      "value": "asked question in German",
+      "updated": "2026-06-09"
+    }
+  }
+}
