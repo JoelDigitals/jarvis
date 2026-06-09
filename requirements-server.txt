@@ -1,0 +1,13 @@
+# Render.com – nur plattformunabhängig, keine Windows-only Pakete
+flask
+flask-cors
+gunicorn
+google-genai
+requests
+beautifulsoup4
+duckduckgo-search
+youtube-transcript-api
+numpy
+psutil
+pyperclip
+discord.py
