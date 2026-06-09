@@ -92,13 +92,63 @@ def wecker(parameters: dict = None, player=None, session_memory=None) -> str:
 
     elif action == "stop":
         _stop_music()
+        _stop_radio()
         return "Musik gestoppt."
+
+    elif action == "radio":
+        station = (parameters.get("music") or "sr1").strip().lower()
+        STATIONS = {
+            "sr1":        "https://liveradio.sr.de/sr/sr1/mp3/128/stream.mp3",
+            "sr1wie":     "https://sr.audiostream.io/sr/1013/mp3/128/stream.mp3",
+            "sr3":        "https://liveradio.sr.de/sr/sr3/mp3/128/stream.mp3",
+            "sr kultur":  "https://liveradio.sr.de/sr/srkultur/mp3/128/stream.mp3",
+            "swr1":       "https://liveradio.swr.de/sw282p3/swr1bw/128.mp3",
+            "swr3":       "https://liveradio.swr.de/sw282p3/swr3/128.mp3",
+            "1live":      "https://wdr-1live-live.icecastssl.wdr.de/wdr/1live/live/mp3/128/stream.mp3",
+            "wdr2":       "https://wdr-wdr2-live.icecastssl.wdr.de/wdr/wdr2/live/mp3/128/stream.mp3",
+            "deutschlandfunk": "https://st01.sslstream.dlf.de/dlf/01/high/aac/stream.aac",
+        }
+        url = STATIONS.get(station)
+        if not url:
+            return f"Unbekannter Sender. Verfügbar: {', '.join(STATIONS.keys())}"
+        return _play_radio(url)
 
     alarms = _load_alarms()
     if alarms:
         times = ", ".join(a["time"] for a in alarms if a.get("active"))
         return f"Wecker aktiv: {times}."
     return "Keine Wecker."
+
+_RADIO_PROCESS: "subprocess.Popen | None" = None
+
+def _play_radio(url: str) -> str:
+    global _RADIO_PROCESS
+    _stop_radio()
+    vlc_path = r"C:\Program Files\VideoLAN\VLC\vlc.exe"
+    import subprocess
+    try:
+        _RADIO_PROCESS = subprocess.Popen(
+            [vlc_path, "--intf", "dummy", "--no-video", url],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        return f"Radio gestartet."
+    except Exception as e:
+        try:
+            import webbrowser
+            webbrowser.open(url)
+            return f"Radio im Browser geöffnet."
+        except:
+            return f"Radio-Fehler: {e}"
+
+def _stop_radio():
+    global _RADIO_PROCESS
+    if _RADIO_PROCESS:
+        try:
+            _RADIO_PROCESS.terminate()
+            _RADIO_PROCESS.wait(timeout=3)
+        except:
+            pass
+        _RADIO_PROCESS = None
 
 def _schedule_alarm(alarm: dict):
     def _fire():

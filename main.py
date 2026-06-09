@@ -988,7 +988,9 @@ class JarvisLive:
             elif name == "do_briefing":
                 from actions.briefing_action import do_briefing
                 r = await loop.run_in_executor(None, lambda: do_briefing(parameters=args, player=self.ui))
-                result = r or "Briefing abgeschlossen."
+                result = (r or "").strip()
+                if result:
+                    result = f"BRIEFING-TEXT ZUM VORLESEN (wörtlich wiederholen, nichts hinzufügen):\n\n{result}\n\n--- ENDE BRIEFING ---"
 
             elif name == "shutdown_jarvis":
                 self.ui.write_log("SYS: Herunterfahren angefordert.")
@@ -1273,7 +1275,7 @@ class JarvisLive:
                 ):
                     self.session        = session
                     self._loop          = asyncio.get_event_loop()
-                    self.audio_in_queue = asyncio.Queue(maxsize=200)
+                    self.audio_in_queue = asyncio.Queue(maxsize=500)
                     self.out_queue      = asyncio.Queue(maxsize=10)
 
                     print("[JARVIS] ✅ Connected.")

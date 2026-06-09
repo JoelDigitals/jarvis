@@ -67,7 +67,7 @@ def _get_jds_tasks() -> str:
 def _get_emails() -> str:
     try:
         from actions.email_manager import email_action
-        r = _call_with_timeout(lambda: email_action({"action": "list", "count": 3}), 5)
+        r = _call_with_timeout(lambda: email_action({"action": "list", "count": 5, "unread_only": True}), 5)
         if r:
             print(f"[BRIEFING] Emails: {str(r)[:80]}")
             if "fehler" not in r.lower()[:20] and "auth" not in r.lower()[:20]:
