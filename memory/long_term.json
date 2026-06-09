@@ -1,17 +1,22 @@
 {
-  "identity": {
-    "email_address": {
-      "value": "info@jl-digitalists.com",
-      "updated": "2026-06-08"
-    },
-    "name": {
-      "value": "Joel",
+  "identity": {},
+  "preferences": {
+    "humor_style": {
+      "value": "loves puns and wordplay, especially related to the bakery puns joke",
       "updated": "2026-06-09"
     }
   },
-  "preferences": {},
   "projects": {},
-  "relationships": {},
+  "relationships": {
+    "girlfriend_activity": {
+      "value": "does climbing training",
+      "updated": "2026-06-09"
+    },
+    "girlfriend_name": {
+      "value": "Ayuki",
+      "updated": "2026-06-09"
+    }
+  },
   "wishes": {},
   "notes": {
     "speaks_german": {
@@ -28,6 +33,46 @@
     },
     "laptops_count": {
       "value": "2",
+      "updated": "2026-06-09"
+    },
+    "user_returned": {
+      "value": "User checked in on 2026-06-09 12:44 PM UTC",
+      "updated": "2026-06-09"
+    },
+    "physics_abi_learning_location": {
+      "value": "school",
+      "updated": "2026-06-09"
+    },
+    "learning_with_lukas_location": {
+      "value": "home",
+      "updated": "2026-06-09"
+    },
+    "buy_email_access_fix": {
+      "value": "User will grant access to GMX account later",
+      "updated": "2026-06-09"
+    },
+    "abitur_stress_notes": {
+      "value": "Needs 7 points in Politics or 8 points in Physics supplementary exams to pass Abitur and is very stressed. Exam dates added to calendar.",
+      "updated": "2026-06-09"
+    },
+    "blog_release_v4_content": {
+      "value": "Content extracted from PDF JDS Management V4.0.0.0 Release Notes. User will publish manually.",
+      "updated": "2026-06-09"
+    },
+    "product_description_priority": {
+      "value": "JDS Management BaseApp for Freelancer needs description review due to low stock/potential sales drive",
+      "updated": "2026-06-09"
+    },
+    "context_people_project_support": {
+      "value": "User values people who fully support their projects",
+      "updated": "2026-06-09"
+    },
+    "user_questions_online_status": {
+      "value": "User questioned if I need internet to work and 'hold the fort' (Autopilot)",
+      "updated": "2026-06-09"
+    },
+    "user_schedule_weekly_location_switch": {
+      "value": "User switches location between home and girlfriend's home every Tuesday",
       "updated": "2026-06-09"
     }
   },

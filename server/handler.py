@@ -103,6 +103,20 @@ def _execute_action(name: str, args: dict) -> str:
         elif name == "wecker":
             from actions.wecker import wecker
             return wecker(parameters=args)
+        elif name == "knowledge_base":
+            from actions.knowledge_base import kb_action
+            return kb_action(parameters=args)
+        elif name == "save_memory":
+            from memory.memory_manager import recall_memory, save_memory
+            cat = args.get("category", "notes")
+            key = args.get("key", "")
+            val = args.get("value", "")
+            if key and val:
+                save_memory({cat: {key: {"value": val}}})
+                return f"Gemerkt: {cat} → {key} = {val}"
+            return "Key und value erforderlich."
+        elif name == "set_autopilot":
+            return f"Autopilot im Web-Modus nicht verfügbar."
         else:
             return f"Unbekannte Aktion: {name}"
     except Exception as e:
@@ -346,6 +360,33 @@ def _make_tools() -> list[dict]:
                     "music":  {"type": "STRING", "description": "Musikdatei-Name (optional)"},
                 },
                 "required": ["action"]
+            }
+        },
+        {
+            "name": "knowledge_base",
+            "description": "Wissensdatenbank für dauerhafte Informationen über die Firma, Kunden, Prozesse, Produkte. Aktionen: set (speichern), get (abrufen), delete (löschen). Kategorien: company, customers, processes, products, contacts, support, notes.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "action":   {"type": "STRING", "description": "set | get | delete"},
+                    "category": {"type": "STRING", "description": "Kategorie z.B. company, customers, processes, products"},
+                    "key":      {"type": "STRING", "description": "Schlüsselname"},
+                    "value":    {"type": "STRING", "description": "Wert für set"},
+                },
+                "required": ["action"]
+            }
+        },
+        {
+            "name": "save_memory",
+            "description": "Speichert eine persönliche Information über den Nutzer im Gedächtnis. Kategorien: identity, preferences, projects, relationships, wishes, notes.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {
+                    "category": {"type": "STRING", "description": "Kategorie: identity, preferences, projects, relationships, wishes, notes"},
+                    "key":      {"type": "STRING", "description": "Schlüsselname (snake_case)"},
+                    "value":    {"type": "STRING", "description": "Wert"},
+                },
+                "required": ["category", "key", "value"]
             }
         },
     ]

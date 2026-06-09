@@ -227,4 +227,4 @@ def do_briefing(parameters: dict = None, player=None, session_memory=None) -> st
 
     result = " ".join(sentences)
     print(f"[BRIEFING] Ergebnis: {str(result)[:200]}")
-    return f"BRIEFING-TEXT ZUM VORLESEN: {result}"
+    return result

@@ -1849,6 +1849,7 @@ class MainWindow(QMainWindow):
         ov.show()
 
     def _toggle_mute(self):
+        was_muted = self._muted
         self._muted = not self._muted
         self.hud.muted = self._muted
         self._style_mute_btn()
@@ -1858,6 +1859,8 @@ class MainWindow(QMainWindow):
         else:
             self._apply_state("LISTENING")
             self._log.append_log("SYS: Mikrofon aktiv.")
+            if was_muted and callable(getattr(self, "on_mic_unmute", None)):
+                self.on_mic_unmute()
 
     def _style_mute_btn(self):
         if self._muted:
@@ -1933,22 +1936,58 @@ class MainWindow(QMainWindow):
         self._apply_state("LISTENING")
         self._log.append_log(f"SYS: Initialisiert. OS={os_name.upper()}. JARVIS bereit.")
 
-class _RootShim:
-    def __init__(self, app: QApplication):
-        self._app = app
-    def mainloop(self):
-        self._app.exec()
-    def protocol(self, *_):
-        pass
+class WebSync:
+    """Pusht Logs/State an den Render-Web-Server (Feuer-und-Vergiss)."""
+    def __init__(self, url: str = ""):
+        self._url = url.rstrip("/")
+        self._pool = None
+
+    def _init_pool(self):
+        if self._pool is not None:
+            return
+        try:
+            import concurrent.futures
+            self._pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        except ImportError:
+            self._pool = False
+
+    def push_log(self, text: str):
+        if not self._url:
+            return
+        self._init_pool()
+        if self._pool:
+            self._pool.submit(self._do_push, log=text)
+
+    def push_state(self, state: str):
+        if not self._url:
+            return
+        self._init_pool()
+        if self._pool:
+            self._pool.submit(self._do_push, state=state)
+
+    def _do_push(self, log: str | None = None, state: str | None = None):
+        try:
+            import urllib.request
+            body = json.dumps({"log": log} if log else {"state": state}).encode()
+            req = urllib.request.Request(
+                f"{self._url}/api/push",
+                data=body,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            urllib.request.urlopen(req, timeout=3)
+        except Exception:
+            pass
 
 
 class JarvisUI:
-    def __init__(self, face_path: str, size=None):
+    def __init__(self, face_path: str, size=None, sync_url: str = ""):
         self._app = QApplication.instance() or QApplication(sys.argv)
         self._app.setStyle("Fusion")
         self._win = MainWindow(face_path)
         self._win.show()
         self.root = _RootShim(self._app)
+        self._sync = WebSync(sync_url)
 
     @property
     def muted(self) -> bool:
@@ -1973,9 +2012,11 @@ class JarvisUI:
 
     def set_state(self, state: str):
         self._win._state_sig.emit(state)
+        self._sync.push_state(state)
 
     def write_log(self, text: str):
         self._win._log_sig.emit(text)
+        self._sync.push_log(text)
 
     def wait_for_api_key(self):
         while not self._win._ready:

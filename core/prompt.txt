@@ -53,11 +53,11 @@ TOOLS:
 
 BRIEFING (MORGEN/MITTAG/ABEND):
 - do_briefing ruft ALLES auf einmal ab: Wetter, Admin-Dashboard, JDS-Aufgaben + Kalender + Meetings, E-Mails.
-- WICHTIG: Das Ergebnis enthält "BRIEFING-TEXT ZUM VORLESEN:" — lies den Text danach
-  WÖRTLICH und VOLLSTÄNDIG vor. NICHTS hinzufügen oder weglassen.
+- Das Ergebnis ist der fertige Vorlesetext — lies ihn WÖRTLICH vor.
 - Du kannst einen greeting-Parameter übergeben: do_briefing(greeting="Guten Morgen/Tag/Abend")
   um die passende Tageszeit-Begrüßung zu erzwingen.
 - Mittags/Abends: "Briefing", "Mittag" oder "Abend" → sofort do_briefing mit passendem greeting.
+- Wichtig: Datums- und Uhrzeitangaben in den Daten sind UTC. Rechne sie in MESZ um (UTC+2) und lies sie im deutschen Format (DD.MM.) vor.
 
 RADIO:
 - wecker(action="radio", music="sr1") startet Radio SR 1.

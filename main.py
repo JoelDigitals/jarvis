@@ -2,6 +2,7 @@ import asyncio
 import gc
 import threading
 import json
+import os
 import sys
 import time
 import traceback
@@ -36,7 +37,7 @@ def get_base_dir():
 BASE_DIR        = get_base_dir()
 API_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
 PROMPT_PATH     = BASE_DIR / "core" / "prompt.txt"
-LIVE_MODEL          = "models/gemini-2.5-flash-native-audio-preview-12-2025"
+LIVE_MODEL          = "models/gemini-3.1-flash-live-preview"
 CHANNELS            = 1
 SEND_SAMPLE_RATE    = 16000  # Gemini braucht 16kHz für Audio-Input
 RECEIVE_SAMPLE_RATE = 24000  # Wiedergabe bleibt gut
@@ -62,6 +63,9 @@ class _AudioBuffer:
 
     def clear(self):
         self._dq.clear()
+
+    def qsize(self) -> int:
+        return len(self._dq)
 
     async def get(self) -> bytes:
         while not self._dq:
@@ -774,9 +778,55 @@ class JarvisLive:
         self._history: list[dict] = []
         self._discord = None
         self.ui.on_text_command = self._on_text_command
+        self._wake_buffer = deque(maxlen=48)
+        self._wake_running = False
+        self._autopilot_active = False
+        self._mic_hold_until = 0.0  # Timestamp bis wann Mic-Input ignoriert wird (Echo-Schutz)
+        self._last_wake_trigger = 0.0  # Cooldown für Google-STT-Wake
+        self.ui.on_mic_unmute = self._flush_wake_buffer
+
+    def _start_wake_listener(self):
+        import concurrent.futures
+        self._wake_buffer.clear()
+        self._wake_running = True
+        def _listen():
+            try:
+                import speech_recognition as sr
+                r = sr.Recognizer()
+                pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                while self._wake_running and self._is_speaking:
+                    time.sleep(0.2)
+                    now = time.time()
+                    if not self._wake_buffer or now - self._last_wake_trigger < 3.0:
+                        continue
+                    # Nur das letzte ~0.5s-Chunk (Nutzer sagt "JARVIS", nicht Echo)
+                    chunk = self._wake_buffer[-1] if self._wake_buffer else b""
+                    if len(chunk) < 8000:  # ~0.5s
+                        continue
+                    try:
+                        audio = sr.AudioData(chunk, SEND_SAMPLE_RATE, 2)
+                        fut = pool.submit(r.recognize_google, audio, language="de-DE", show_all=False)
+                        txt = fut.result(timeout=5).lower()
+                        if "jarvis" in txt or "javis" in txt:
+                            print("[JARVIS] ⚡ Wake word via Google STT")
+                            self._last_wake_trigger = now
+                            self.audio_buf.interrupt()
+                            self.set_speaking(False)
+                    except concurrent.futures.TimeoutError:
+                        pass
+                    except (LookupError, sr.UnknownValueError, sr.RequestError):
+                        pass
+                pool.shutdown(wait=False)
+            except ImportError:
+                pass
+        t = threading.Thread(target=_listen, daemon=True)
+        t.start()
+
+    def _stop_wake_listener(self):
+        self._wake_running = False
 
     def _build_context(self) -> str:
-        recent = self._history[-6:]
+        recent = self._history[-10:]
         lines = ["Letzter Gesprächsverlauf (weiter machen wo wir aufgehört haben):"]
         for h in recent:
             role = "Du" if h["role"] == "user" else "Jarvis"
@@ -784,13 +834,35 @@ class JarvisLive:
         lines.append("---")
         return "\n".join(lines)
 
+    def _flush_wake_buffer(self):
+        """Flushed Wake-Buffer nach Mic-Unmute → sendet Nutzersprache an Gemini."""
+        buf = self._wake_buffer
+        if not buf or not self._loop or not hasattr(self, "out_queue") or self.out_queue is None:
+            return
+        try:
+            raw = b"".join(buf)
+        except Exception:
+            return
+        buf.clear()
+        if len(raw) < SEND_SAMPLE_RATE * 2:  # <2s → zu kurz
+            return
+        # Nur letzten ~2s (Nutzer hat während Ende des Sprechens gesprochen, nicht Echo vom Anfang)
+        chunk = raw[-SEND_SAMPLE_RATE * 2:]
+        try:
+            self._loop.call_soon_threadsafe(
+                self.out_queue.put_nowait,
+                {"data": chunk, "mime_type": f"audio/pcm;rate={SEND_SAMPLE_RATE}"}
+            )
+        except (RuntimeError, AttributeError):
+            pass
+
     def _on_text_command(self, text: str):
         if not self._loop or not self.session:
             return
         try:
             asyncio.run_coroutine_threadsafe(
                 self.session.send_client_content(
-                    turns={"parts": [{"text": text}]},
+                    turns=types.ContentDict(role="user", parts=[types.PartDict(text=text)]),
                     turn_complete=True
                 ),
                 self._loop
@@ -809,7 +881,7 @@ class JarvisLive:
         self._response_queues.append(q)
         try:
             await self.session.send_client_content(
-                turns={"parts": [{"text": text}]},
+                turns=types.ContentDict(role="user", parts=[types.PartDict(text=text)]),
                 turn_complete=True
             )
             try:
@@ -825,7 +897,10 @@ class JarvisLive:
             self._is_speaking = value
         if value:
             self.ui.set_state("SPEAKING")
+            self._start_wake_listener()
         elif not self.ui.muted:
+            self._stop_wake_listener()
+            self._mic_hold_until = time.time() + 0.6  # 600ms Totzeit nach Sprechen (Echo-Schutz)
             self.ui.set_state("LISTENING")
 
     def speak(self, text: str):
@@ -834,7 +909,7 @@ class JarvisLive:
         try:
             asyncio.run_coroutine_threadsafe(
                 self.session.send_client_content(
-                    turns={"parts": [{"text": text}]},
+                    turns=types.ContentDict(role="user", parts=[types.PartDict(text=text)]),
                     turn_complete=True
                 ),
                 self._loop
@@ -870,12 +945,11 @@ class JarvisLive:
         parts.append(sys_prompt)
 
         return types.LiveConnectConfig(
-            response_modalities=["AUDIO"],
-            output_audio_transcription={},
-            input_audio_transcription={},
+            response_modalities=[types.Modality.AUDIO],
+            output_audio_transcription=types.AudioTranscriptionConfig(),
+            input_audio_transcription=types.AudioTranscriptionConfig(),
             system_instruction="\n".join(parts),
             tools=[{"function_declarations": TOOL_DECLARATIONS}],
-            session_resumption=types.SessionResumptionConfig(),
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(
@@ -1082,8 +1156,6 @@ class JarvisLive:
                 from actions.briefing_action import do_briefing
                 r = await loop.run_in_executor(None, lambda: do_briefing(parameters=args, player=self.ui))
                 result = (r or "").strip()
-                if result:
-                    result = f"BRIEFING-TEXT ZUM VORLESEN (wörtlich wiederholen, nichts hinzufügen):\n\n{result}\n\n--- ENDE BRIEFING ---"
 
             elif name == "shutdown_jarvis":
                 self.ui.write_log("SYS: Herunterfahren angefordert.")
@@ -1125,13 +1197,12 @@ class JarvisLive:
                 await asyncio.sleep(0.1)
                 continue
             try:
-                await self.session.send_realtime_input(media=msg)
-            except Exception:
-                try:
-                    self.out_queue.put_nowait(msg)
-                except asyncio.QueueFull:
-                    pass
-                raise
+                await self.session.send_realtime_input(
+                    audio=types.Blob(data=msg["data"], mime_type=msg["mime_type"])
+                )
+            except Exception as e:
+                print(f"[JARVIS] ⚠️ send_realtime failed: {e}")
+                await asyncio.sleep(0.1)
 
     async def _listen_audio(self):
         print("[JARVIS] 🎤 Mic started")
@@ -1147,8 +1218,12 @@ class JarvisLive:
             if self.ui.muted:
                 return
             data = indata.tobytes()
+            # Während JARVIS spricht oder in der Echo-Totzeit: Audio an Wake-Buffer
+            if self._is_speaking or time.time() < self._mic_hold_until:
+                self._wake_buffer.append(data)
+                return
             try:
-                loop.call_soon_threadsafe(_safe_put, {"data": data, "mime_type": "audio/pcm"})
+                loop.call_soon_threadsafe(_safe_put, {"data": data, "mime_type": f"audio/pcm;rate={SEND_SAMPLE_RATE}"})
             except RuntimeError:
                 pass
 
@@ -1174,7 +1249,7 @@ class JarvisLive:
             while True:
                 async for response in self.session.receive():
 
-                    if response.data:
+                    if response.data and isinstance(response.data, bytes) and len(response.data) > 0:
                         self.set_speaking(True)
                         self.audio_buf.put(response.data)
 
@@ -1189,14 +1264,17 @@ class JarvisLive:
                         if sc.input_transcription and sc.input_transcription.text:
                             txt = sc.input_transcription.text.strip()
                             if txt:
-                                in_buf.append(txt)
-                                # wake word detection → interrupt playback
                                 if self._is_speaking and ("jarvis" in txt.lower() or "javis" in txt.lower()):
-                                    print("[JARVIS] ⚡ Wake word erkannt — unterbreche")
+                                    print("[JARVIS] ⚡ Wake word per Gemini erkannt")
                                     self.audio_buf.interrupt()
                                     self.set_speaking(False)
+                                in_buf.append(txt)
 
                         if sc.turn_complete:
+                            # Warte bis letzte Audio aus dem Puffer abgespielt + Speaker-Latenz
+                            while self.audio_buf.qsize() > 0:
+                                await asyncio.sleep(0.05)
+                            await asyncio.sleep(0.15)
                             self.set_speaking(False)
 
                             full_in = " ".join(in_buf).strip()
@@ -1210,6 +1288,10 @@ class JarvisLive:
                                 self.ui.write_log(f"Jarvis: {full_out}")
                                 self._forward_response(full_out)
                                 self._history.append({"role": "model", "text": full_out})
+
+                            # History begrenzen auf max 20 Einträge (10 Turns)
+                            if len(self._history) > 20:
+                                self._history = self._history[-20:]
 
                             out_buf = []
 
@@ -1261,20 +1343,25 @@ class JarvisLive:
                 try:
                     chunk = await self.audio_buf.get()
                 except asyncio.CancelledError:
-                    # interruption by wake word
-                    self.set_speaking(False)
-                    stream.stop()
-                    stream.close()
-                    # recreate stream for next utterance
-                    stream = sd.RawOutputStream(
-                        samplerate=RECEIVE_SAMPLE_RATE,
-                        channels=CHANNELS,
-                        dtype="int16",
-                        blocksize=CHUNK_SIZE,
-                    )
-                    stream.start()
-                    continue
-                self.set_speaking(True)
+                    if self.audio_buf._interrupted:
+                        # Wake-Word-Unterbrechung — Stream neu aufbauen
+                        self.audio_buf._interrupted = False
+                        self.set_speaking(False)
+                        stream.stop()
+                        stream.close()
+                        stream = sd.RawOutputStream(
+                            samplerate=RECEIVE_SAMPLE_RATE,
+                            channels=CHANNELS,
+                            dtype="int16",
+                            blocksize=CHUNK_SIZE,
+                        )
+                        stream.start()
+                        continue
+                    else:
+                        # TaskGroup-Shutdown — sauber beenden
+                        raise
+                if not self._is_speaking:
+                    self.set_speaking(True)
                 await asyncio.to_thread(stream.write, chunk)
         except Exception as e:
             print(f"[JARVIS] ❌ Play: {e}")
@@ -1291,8 +1378,9 @@ class JarvisLive:
             delay = (next_hour - now).total_seconds()
 
             def _tick():
-                self.speak("Sir, es ist Zeit etwas zu trinken! Bleiben Sie hydriert.")
-                self.ui.write_log("SYS: Trink-Erinnerung 🔔")
+                if not self.ui.muted:
+                    self.speak("Sir, es ist Zeit etwas zu trinken! Bleiben Sie hydriert.")
+                    self.ui.write_log("SYS: Trink-Erinnerung 🔔")
                 threading.Timer(3600.0, _tick).start()
 
             threading.Timer(delay, _tick).start()
@@ -1591,10 +1679,10 @@ class JarvisLive:
                         context = self._build_context()
                         if context:
                             await session.send_client_content(
-                                turns={"parts": [{"text": context}]},
+                                turns=types.ContentDict(role="user", parts=[types.PartDict(text=context)]),
                                 turn_complete=True
                             )
-                            print(f"[JARVIS] 📜 Context restored ({len(self._history)} turns)")
+                            print(f"[JARVIS] 📜 Context restored ({min(len(self._history),20)} turns)")
 
                     self._setup_hourly_reminder()
                     self._setup_daily_report()
@@ -1602,7 +1690,6 @@ class JarvisLive:
                     self._connect_jds()
                     self._auto_setup_email()
                     self._start_discord()
-                    self._set_autopilot(False)
                     from actions.wecker import schedule_all
                     schedule_all()
 
@@ -1648,7 +1735,16 @@ def main():
     except:
         pass
 
-    ui = JarvisUI("face.png")
+    # ── Sync-URL für Web-Interface ──
+    _sync_url = os.environ.get("SYNC_URL", "")
+    if not _sync_url:
+        try:
+            _cfg = json.loads((Path(__file__).parent / "config" / "settings.json").read_text(encoding="utf-8"))
+            _sync_url = _cfg.get("web_sync_url", "https://jarvis-joel.onrender.com")
+        except Exception:
+            _sync_url = "https://jarvis-joel.onrender.com"
+
+    ui = JarvisUI("face.png", sync_url=_sync_url)
 
     def runner():
         ui.wait_for_api_key()

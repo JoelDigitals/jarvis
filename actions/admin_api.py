@@ -1,6 +1,26 @@
 import json, os, sys
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+MESZ = timezone(timedelta(hours=2))
+
+def _fmt_dt(iso_str: str) -> str:
+    if not iso_str:
+        return "?"
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00")).astimezone(MESZ)
+        return dt.strftime("%d.%m. %H:%M")
+    except:
+        return iso_str[:16]
+
+def _fmt_date(iso_str: str) -> str:
+    if not iso_str:
+        return "?"
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00")).astimezone(MESZ)
+        return dt.strftime("%d.%m.%Y")
+    except:
+        return iso_str[:10]
 
 try:
     import requests
@@ -94,7 +114,7 @@ def action_appointments(status: str = "") -> str:
     for a in all_apps:
         if status and a["_status"] != status:
             continue
-        date = (a.get("date") or "?")[:10]
+        date = _fmt_date(a.get("date", ""))
         time = (a.get("time") or "?")[:5]
         name = a.get("name", "?")
         s = a.get("_status", "?")
@@ -182,7 +202,7 @@ def action_orders(status: str = "") -> str:
     for o in orders:
         if status and o.get("status", "").lower() != status.lower():
             continue
-        date = (o.get("created_at") or "?")[:10]
+        date = _fmt_date(o.get("created_at", ""))
         name = f"{o.get('first_name', '')} {o.get('last_name', '')}".strip() or "?"
         total = o.get("total_amount", "?")
         lines.append(f"  {date} — {name} — {total} EUR [{o.get('status', '?')}]")

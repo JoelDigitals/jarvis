@@ -50,27 +50,24 @@ def weather_action(parameters: dict, player=None, session_memory=None):
             code = current.get("weather_code", 0)
             wind = current.get("wind_speed_10m")
             weather_desc = _wmo_code(code)
-            parts = [f"{weather_desc}, {temp:.0f}°C (gefühlt {feels:.0f}°C)"]
-            if humidity:
-                parts.append(f"Luftfeuchte: {humidity}%")
+            parts = [f"Aktuell {weather_desc.lower()}, {temp:.0f} Grad, gefühlt {feels:.0f} Grad"]
             if wind:
-                parts.append(f"Wind: {wind:.0f} km/h")
-            lines.append("Aktuell: " + " | ".join(parts))
-        else:
-            lines.append("Keine aktuellen Daten.")
+                parts.append(f"Wind mit {wind:.0f} km/h")
+            lines.append(". ".join(parts) + ".")
 
         # forecast
         if daily and daily.get("time"):
-            lines.append("")
-            lines.append("Vorhersage:")
-            for i in range(len(daily["time"])):
+            forecast_parts = []
+            for i in range(min(len(daily["time"]), 3)):
                 date = daily["time"][i]
                 wc = daily["weather_code"][i] if daily.get("weather_code") else 0
                 t_max = daily["temperature_2m_max"][i] if daily.get("temperature_2m_max") else "?"
                 t_min = daily["temperature_2m_min"][i] if daily.get("temperature_2m_min") else "?"
                 precip = daily["precipitation_sum"][i] if daily.get("precipitation_sum") else 0
                 day_name = _day_name(date)
-                lines.append(f"  {day_name}: {_wmo_code(wc)}, {t_max:.0f}/{t_min:.0f}°C, {precip:.0f}mm Regen")
+                forecast_parts.append(f"{day_name} {_wmo_code(wc).lower()}, {t_max:.0f} bis {t_min:.0f} Grad, {precip:.0f} Millimeter Regen")
+            if forecast_parts:
+                lines.append("Die Vorhersage: " + ". ".join(forecast_parts) + ".")
 
         msg = "\n".join(lines)
         if player:
@@ -84,17 +81,17 @@ def weather_action(parameters: dict, player=None, session_memory=None):
 
 def _wmo_code(code: int) -> str:
     codes = {
-        0: "☀️ Klar", 1: "🌤 Überwiegend klar", 2: "⛅ Teilweise bewölkt", 3: "☁️ Bewölkt",
-        45: "🌫 Nebel", 48: "🌫 Reifnebel",
-        51: "🌧 Nieselregen", 53: "🌧 Nieselregen", 55: "🌧 Nieselregen",
-        56: "🌧 Eisregen", 57: "🌧 Eisregen",
-        61: "🌧 Regen", 63: "🌧 Regen", 65: "🌧 Regen",
-        66: "🌧 Eisregen", 67: "🌧 Eisregen",
-        71: "🌨 Schneefall", 73: "🌨 Schneefall", 75: "🌨 Schneefall",
-        77: "🌨 Schneekörner",
-        80: "🌦 Regenschauer", 81: "🌦 Regenschauer", 82: "🌦 Regenschauer",
-        85: "🌨 Schneeschauer", 86: "🌨 Schneeschauer",
-        95: "⛈ Gewitter", 96: "⛈ Gewitter mit Hagel", 99: "⛈ Gewitter mit Hagel",
+        0: "Klar", 1: "Überwiegend klar", 2: "Teilweise bewölkt", 3: "Bewölkt",
+        45: "Nebel", 48: "Reifnebel",
+        51: "Nieselregen", 53: "Nieselregen", 55: "Nieselregen",
+        56: "Eisregen", 57: "Eisregen",
+        61: "Regen", 63: "Regen", 65: "Regen",
+        66: "Eisregen", 67: "Eisregen",
+        71: "Schneefall", 73: "Schneefall", 75: "Schneefall",
+        77: "Schneekörner",
+        80: "Regenschauer", 81: "Regenschauer", 82: "Regenschauer",
+        85: "Schneeschauer", 86: "Schneeschauer",
+        95: "Gewitter", 96: "Gewitter mit Hagel", 99: "Gewitter mit Hagel",
     }
     return codes.get(code, f"Unbekannt ({code})")
 

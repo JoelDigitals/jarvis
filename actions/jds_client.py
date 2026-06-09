@@ -2,7 +2,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from datetime import datetime, date
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional
 
 try:
@@ -17,6 +17,28 @@ def _base_dir() -> Path:
     return Path(__file__).resolve().parent.parent
 
 JDS_CONFIG_PATH = _base_dir() / "config" / "jds_config.json"
+
+MESZ = timezone(timedelta(hours=2))  # UTC+2
+
+def _fmt_dt(iso_str: str) -> str:
+    """Formatiert ISO-String (UTC) → deutsch 'DD.MM. HH:MM' (MESZ)."""
+    if not iso_str:
+        return "?"
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00")).astimezone(MESZ)
+        return dt.strftime("%d.%m. %H:%M")
+    except:
+        return iso_str[:16]
+
+def _fmt_date(iso_str: str) -> str:
+    """Formatiert ISO-Datum → deutsch 'DD.MM.YYYY'."""
+    if not iso_str:
+        return "?"
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00")).astimezone(MESZ)
+        return dt.strftime("%d.%m.%Y")
+    except:
+        return iso_str[:10]
 
 def _load_config() -> dict:
     if JDS_CONFIG_PATH.exists():
@@ -208,7 +230,7 @@ class JDSClient:
         for t in tasks[:15]:
             status = "✓" if t.get("status") == "done" else "○"
             title = t.get("title", "?")
-            lines.append(f"  {status} [{t.get('id', '?')}] {title}")
+            lines.append(f"  {status} {title}")
         return "\n".join(lines)
 
     def create_task(self, title: str, description: str = "", assigned_to: str = "", due_date: str = "") -> str:
@@ -236,7 +258,7 @@ class JDSClient:
         if t.get("description"):
             lines.append(f"Beschreibung: {t['description']}")
         if t.get("due_date"):
-            lines.append(f"Fällig: {t['due_date']}")
+            lines.append(f"Fällig: {_fmt_date(t['due_date'])}")
         if t.get("subtask_count"):
             lines.append(f"Unteraufgaben: {t['subtask_count']}")
         return "\n".join(lines)
@@ -262,9 +284,9 @@ class JDSClient:
             return "Keine Meetings gefunden."
         lines = ["Meetings:"]
         for m in meetings[:10]:
-            date_str = m.get("date", "")[:10]
+            date_str = _fmt_date(m.get("date", ""))
             title = m.get("title", "?")
-            lines.append(f"  📅 {date_str} — {title}")
+            lines.append(f"  {date_str} — {title}")
         return "\n".join(lines)
 
     def list_leads(self, stage: str = "") -> str:
@@ -295,7 +317,7 @@ class JDSClient:
         for c in customers[:15]:
             name = f"{c.get('first_name', '')} {c.get('last_name', '')}".strip()
             email = c.get("email", "")
-            lines.append(f"  👤 {name} — {email}")
+            lines.append(f"  {name} — {email}")
         return "\n".join(lines)
 
     def list_products(self) -> str:
@@ -310,7 +332,7 @@ class JDSClient:
             name = p.get("name", "?")
             price = p.get("price", "?")
             stock = p.get("stock", 0)
-            lines.append(f"  📦 {name} — {price}€ (Lager: {stock})")
+            lines.append(f"  {name} — {price}€ (Lager: {stock})")
         return "\n".join(lines)
 
     def list_vacations(self, status: str = "pending") -> str:
@@ -326,8 +348,8 @@ class JDSClient:
         lines = [f"Urlaubsanträge ({len(vactions)}):"]
         for v in vactions[:10]:
             user = v.get("user_name", "?")
-            dates = f"{v.get('start_date', '?')} — {v.get('end_date', '?')}"
-            lines.append(f"  🏖 {user}: {dates}")
+            dates = f"{_fmt_date(v.get('start_date', ''))} — {_fmt_date(v.get('end_date', ''))}"
+            lines.append(f"  {user}: {dates}")
         return "\n".join(lines)
 
     def list_deliveries(self) -> str:
@@ -342,7 +364,7 @@ class JDSClient:
             product = d.get("product_name", "?")
             qty = d.get("quantity", 0)
             supplier = d.get("supplier", "?")
-            lines.append(f"  🚚 {product} ×{qty} von {supplier}")
+            lines.append(f"  {product} x{qty} von {supplier}")
         return "\n".join(lines)
 
     def list_invoices(self, status: str = "") -> str:
@@ -360,7 +382,7 @@ class JDSClient:
             title = inv.get("title", "?")
             inv_status = inv.get("status", "?")
             amount = inv.get("total", "?")
-            lines.append(f"  📄 {title} — {amount}€ [{inv_status}]")
+            lines.append(f"  {title} — {amount}€ [{inv_status}]")
         return "\n".join(lines)
 
     def list_events(self, days: int = 7) -> str:
@@ -377,8 +399,8 @@ class JDSClient:
         lines = [f"Events ({len(events)}):"]
         for e in events[:10]:
             title = e.get("title", "?")
-            start = e.get("start_time", "?")[:16]
-            lines.append(f"  📅 {start} — {title}")
+            start = _fmt_dt(e.get("start_time", ""))
+            lines.append(f"  {start} — {title}")
         return "\n".join(lines)
 
     def list_notifications(self, unread_only: bool = True) -> str:
@@ -394,7 +416,7 @@ class JDSClient:
         lines = [f"Benachrichtigungen ({len(notifs)}):"]
         for n in notifs[:10]:
             msg = n.get("message", "?")
-            lines.append(f"  🔔 {msg}")
+            lines.append(f"  {msg}")
         return "\n".join(lines)
 
     def list_storage_locations(self) -> str:
@@ -409,7 +431,7 @@ class JDSClient:
             num = l.get("number", "?")
             loc_type = l.get("location_type", "")
             desc = l.get("description", "")
-            lines.append(f"  📦 {num} ({loc_type}) {desc}")
+            lines.append(f"  {num} ({loc_type}) {desc}")
         return "\n".join(lines)
 
     def list_users(self) -> str:
@@ -423,7 +445,7 @@ class JDSClient:
         for u in users:
             name = u.get("full_name", u.get("username", "?"))
             email = u.get("email", "")
-            lines.append(f"  👤 {name} — {email}")
+            lines.append(f"  {name} — {email}")
         return "\n".join(lines)
 
 

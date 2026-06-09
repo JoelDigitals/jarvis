@@ -124,21 +124,38 @@ _RADIO_PROCESS: "subprocess.Popen | None" = None
 def _play_radio(url: str) -> str:
     global _RADIO_PROCESS
     _stop_radio()
-    vlc_path = r"C:\Program Files\VideoLAN\VLC\vlc.exe"
     import subprocess
-    try:
-        _RADIO_PROCESS = subprocess.Popen(
-            [vlc_path, "--intf", "dummy", "--no-video", url],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-        return f"Radio gestartet."
-    except Exception as e:
+    import os
+    # mehrere mögliche VLC-Pfade durchprobieren
+    vlc_candidates = [
+        r"C:\Program Files\VideoLAN\VLC\vlc.exe",
+        r"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe",
+        r"C:\Program Files\VLC\vlc.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\VLC\vlc.exe"),
+        os.path.expandvars(r"%APPDATA%\VLC\vlc.exe"),
+    ]
+    for vlc_path in vlc_candidates:
+        if not os.path.isfile(vlc_path):
+            continue
         try:
-            import webbrowser
-            webbrowser.open(url)
-            return f"Radio im Browser geöffnet."
-        except:
-            return f"Radio-Fehler: {e}"
+            _RADIO_PROCESS = subprocess.Popen(
+                [vlc_path, "--intf", "dummy", "--no-video", "--no-volume-save", url],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            import time
+            time.sleep(0.5)
+            if _RADIO_PROCESS.poll() is not None:
+                continue
+            return f"Radio gestartet."
+        except Exception:
+            continue
+    # VLC nicht gefunden → Browser-Fallback
+    try:
+        import webbrowser
+        webbrowser.open(url)
+        return f"Radio im Browser geöffnet."
+    except:
+        return f"Radio-Fehler: VLC nicht gefunden und Browser-Fallback fehlgeschlagen."
 
 def _stop_radio():
     global _RADIO_PROCESS

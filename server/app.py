@@ -1,7 +1,8 @@
-"""JARVIS Web-Server – Chat + Konfiguration + Mobile UI (Render.com ready)"""
-import json, os, sys, threading
+"""JARVIS Web-Server – Chat + Konfiguration + Live-Sync + HUD-UI"""
+import json, os, sys, threading, time
 from pathlib import Path
-from flask import Flask, request, jsonify, render_template, send_from_directory
+from collections import deque
+from flask import Flask, request, jsonify, render_template, send_from_directory, Response, stream_with_context
 from flask_cors import CORS
 
 BASE = Path(__file__).resolve().parent.parent
@@ -12,6 +13,26 @@ app = Flask(__name__, template_folder=str(TEMPLATES), static_folder=str(STATIC))
 CORS(app)
 
 CONFIG_DIR = BASE / "config"
+
+# ── Live-Sync (lokale Instanz → Web-UI) ──
+SYNC_LOGS = deque(maxlen=200)
+SYNC_STATE = "LISTENING"
+SYNC_CLIENTS: list[threading.Event] = []  # SSE clients waiting for data
+_sync_lock = threading.Lock()
+
+def push_sync(log: str | None = None, state: str | None = None):
+    """Wird von POST /api/push oder lokalem Sync-Thread aufgerufen."""
+    with _sync_lock:
+        global SYNC_STATE
+        if log:
+            SYNC_LOGS.append({"text": log, "ts": time.strftime("%H:%M:%S")})
+        if state:
+            SYNC_STATE = state
+        # Alle SSE-Clients benachrichtigen
+        for ev in SYNC_CLIENTS:
+            ev.set()
+
+# ── Config Helpers ──
 
 def _load_settings():
     try:
@@ -27,6 +48,8 @@ def _save_settings(data):
     existing = _load_settings()
     existing.update(data)
     p.write_text(json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+
+# ── Routes ──
 
 @app.route("/")
 def index():
@@ -163,8 +186,49 @@ def status():
         "admin_api_configured": bool(cfg.get("admin_api_secret")),
         "discord_configured": bool(cfg.get("discord_config", {}).get("bot_token")),
         "home_location": cfg.get("home_location", ""),
-        "api_key_configured": bool(_get_api_key_any()),
+        "api_key_configured": bool(h._get_api_key()),
     })
+
+# ── Live-Sync Endpoints ──
+
+@app.route("/api/push", methods=["POST"])
+def push():
+    """Wird von der lokalen Instanz aufgerufen, um Logs/State zu pushen."""
+    data = request.get_json(force=True) or {}
+    log = data.get("log")
+    state = data.get("state")
+    push_sync(log=log, state=state)
+    return jsonify({"ok": True})
+
+@app.route("/api/sync-logs")
+def sync_logs():
+    """Gibt die aktuellen Sync-Logs zurück (Polling)."""
+    with _sync_lock:
+        return jsonify({
+            "logs": list(SYNC_LOGS),
+            "state": SYNC_STATE,
+        })
+
+@app.route("/api/stream")
+def stream():
+    """Server-Sent Events: Live-Updates für das Web-UI."""
+    ev = threading.Event()
+    with _sync_lock:
+        SYNC_CLIENTS.append(ev)
+    def gen():
+        try:
+            while True:
+                ev.wait()
+                ev.clear()
+                with _sync_lock:
+                    logs = list(SYNC_LOGS)
+                    state = SYNC_STATE
+                yield f"data: {json.dumps({'logs': logs[-5:], 'state': state})}\n\n"
+        except GeneratorExit:
+            with _sync_lock:
+                if ev in SYNC_CLIENTS:
+                    SYNC_CLIENTS.remove(ev)
+    return Response(stream_with_context(gen()), mimetype="text/event-stream")
 
 def _get_api_key_any():
     import server.handler as h
