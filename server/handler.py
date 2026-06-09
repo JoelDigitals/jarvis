@@ -97,6 +97,9 @@ def _execute_action(name: str, args: dict) -> str:
         elif name == "admin_api":
             from actions.admin_api import admin_action
             return admin_action(parameters=args)
+        elif name == "do_briefing":
+            from actions.briefing_action import do_briefing
+            return do_briefing(parameters=args)
         else:
             return f"Unbekannte Aktion: {name}"
     except Exception as e:
@@ -319,6 +322,15 @@ def _make_tools() -> list[dict]:
                 "required": ["action"]
             }
         },
+        {
+            "name": "do_briefing",
+            "description": "Führt das gesamte Morgen-Briefing in EINEM Aufruf aus: Wetter, JDS-Aufgaben, E-Mails, Admin-Dashboard. Einziger Aufruf für das Briefing.",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {},
+                "required": []
+            }
+        },
     ]
     return [types.Tool(function_declarations=[d]) for d in declarations]
 
@@ -363,11 +375,26 @@ class ChatSession:
         )
         return self._chat
 
+    def _send_with_retry(self, msg):
+        import time
+        for attempt in range(3):
+            try:
+                return self._chat.send_message(msg)
+            except Exception as e:
+                err = str(e)
+                if "429" in err or "RESOURCE_EXHAUSTED" in err:
+                    wait = min(2 ** attempt * 5, 30)
+                    print(f"[JARVIS] ⏳ Rate limit, retry in {wait}s ({attempt+1}/3)")
+                    time.sleep(wait)
+                    continue
+                raise
+        raise Exception("Rate limit exceeded after 3 retries.")
+
     def send(self, text: str) -> tuple[str, list[dict]]:
         logs = []
         if not self._chat:
             return "Chat nicht initialisiert.", logs
-        response = self._chat.send_message(text)
+        response = self._send_with_retry(text)
         answer_parts = []
         while True:
             try:
@@ -382,7 +409,7 @@ class ChatSession:
                         logs.append({"tool": name, "args": args})
                         result = _execute_action(name, args)
                         logs.append({"result": (result or "")[:200]})
-                        response = self._chat.send_message(
+                        response = self._send_with_retry(
                             types.Content(
                                 parts=[types.Part.from_function_response(
                                     name=name,

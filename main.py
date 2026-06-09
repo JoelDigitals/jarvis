@@ -127,6 +127,15 @@ TOOL_DECLARATIONS = [
         }
     },
     {
+        "name": "do_briefing",
+        "description": "Führt das gesamte Morgen-Briefing in EINEM Aufruf aus: Wetter, JDS-Aufgaben, E-Mails, Admin-Dashboard. Einziger Aufruf für das Briefing.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {},
+            "required": []
+        }
+    },
+    {
         "name": "send_message",
         "description": "Sends a text message via WhatsApp, Telegram, or other messaging platform.",
         "parameters": {
@@ -941,6 +950,11 @@ class JarvisLive:
                 r = await loop.run_in_executor(None, lambda: admin_action(parameters=args, player=self.ui))
                 result = r or "Done."
 
+            elif name == "do_briefing":
+                from actions.briefing_action import do_briefing
+                r = await loop.run_in_executor(None, lambda: do_briefing(parameters=args, player=self.ui))
+                result = r or "Briefing abgeschlossen."
+
             elif name == "shutdown_jarvis":
                 self.ui.write_log("SYS: Herunterfahren angefordert.")
                 self.speak("Auf Wiedersehen, Sir.")
@@ -1048,16 +1062,29 @@ class JarvisLive:
                         fn_responses = []
                         for fc in response.tool_call.function_calls:
                             print(f"[JARVIS] 📞 {fc.name}")
-                            fr = await self._execute_tool(fc)
-                            fn_responses.append(fr)
-                        await self.session.send_tool_response(
-                            function_responses=fn_responses
-                        )
+                            try:
+                                fr = await self._execute_tool(fc)
+                                fn_responses.append(fr)
+                            except Exception as e2:
+                                print(f"[JARVIS] ❌ Tool {fc.name}: {e2}")
+                                traceback.print_exc()
+                                fn_responses.append(types.FunctionResponse(
+                                    id=fc.id, name=fc.name,
+                                    response={"result": f"Fehler: {e2}"}
+                                ))
+                        try:
+                            await self.session.send_tool_response(
+                                function_responses=fn_responses
+                            )
+                        except Exception as e2:
+                            print(f"[JARVIS] ❌ send_tool_response: {e2}")
 
+        except asyncio.CancelledError:
+            print("[JARVIS] Recv cancelled")
+            return
         except Exception as e:
             print(f"[JARVIS] ❌ Recv: {e}")
             traceback.print_exc()
-            raise
 
     async def _play_audio(self):
         print("[JARVIS] 🔊 Play started")

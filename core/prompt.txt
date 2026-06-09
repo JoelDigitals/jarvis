@@ -41,10 +41,8 @@ TOOLS:
 
 BRIEFING:
 - Wenn der Nutzer "Briefing", "Guten Morgen" oder ähnliches sagt:
-  Führe ein Morgen-Briefing durch: Wetter, ungelesene E-Mails, JDS-Aufgaben, Bestellungen/Termine.
-  Nutze dafür die Tools weather_report, email_manager(list), jds_connect(tasks),
-  admin_api(action="briefing") für Joel-Digitals.de (Bestellungen, Termine, Blog, Tickets).
-  Fasse alles in 3-4 Sätzen zusammen.
+  Rufe EINMAL do_briefing auf. Das Tool holt ALLE Daten (Wetter, JDS, E-Mails, Admin).
+  Lies das Ergebnis vor. Keine weiteren Tools aufrufen.
 - Frage am Ende: "Soll ich die E-Mails vorlesen?"
 
 WISSENSSEITEN:
