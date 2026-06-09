@@ -339,7 +339,7 @@ class HudCanvas(QWidget):
             p.setPen(QPen(qcol(C.PRI, 60), 1))
             p.setFont(QFont("Courier New", 13, QFont.Weight.Bold))
             p.drawText(QRectF(cx - 80, cy - 14, 160, 28),
-                       Qt.AlignmentFlag.AlignCenter, "J.A.R.V.I.S")
+                       Qt.AlignmentFlag.AlignCenter, "JARVIS")
 
         bl = 16
         bc = qcol(C.PRI, 100)
@@ -385,7 +385,7 @@ class HudCanvas(QWidget):
 
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setPen(QPen(col, 1))
-        p.setFont(QFont("Courier New", 11, QFont.Weight.Bold))
+        p.setFont(QFont("Courier New", 13, QFont.Weight.Bold))
         p.drawText(QRectF(0, sy, W, 26), Qt.AlignmentFlag.AlignCenter, txt)
 
 
@@ -435,13 +435,13 @@ class MetricBar(QWidget):
             p.setBrush(QBrush(bar_col))
             p.drawRoundedRect(QRectF(bar_x, bar_y, fill_w, bar_h), 2, 2)
 
-        p.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        p.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
         p.setPen(QPen(qcol(C.TEXT_DIM), 1))
         p.drawText(QRectF(8, 5, 50, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._label)
 
-        p.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
+        p.setFont(QFont("Courier New", 11, QFont.Weight.Bold))
         p.setPen(QPen(bar_col if self._text != "--" else qcol(C.TEXT_DIM), 1))
-        p.drawText(QRectF(0, 4, W - 6, 16), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, self._text)
+        p.drawText(QRectF(0, 3, W - 6, 18), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, self._text)
 
 class LogWidget(QTextEdit):
     _sig = pyqtSignal(str)
@@ -449,7 +449,7 @@ class LogWidget(QTextEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setReadOnly(True)
-        self.setFont(QFont("Courier New", 9))
+        self.setFont(QFont("Courier New", 10))
         self.setStyleSheet(f"""
             QTextEdit {{
                 background: {C.PANEL};
@@ -1308,7 +1308,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self, face_path: str):
         super().__init__()
-        self.setWindowTitle("J.A.R.V.I.S — MARK XXXIX")
+        self.setWindowTitle("JARVIS — Joel Digitals")
         self.setMinimumSize(_MIN_W, _MIN_H)
         self.resize(_DEFAULT_W, _DEFAULT_H)
 
@@ -1442,10 +1442,10 @@ class MainWindow(QMainWindow):
 
     def _build_header(self) -> QWidget:
         w = QWidget()
-        w.setFixedHeight(54)
+        w.setFixedHeight(60)
         w.setStyleSheet(f"background: {C.DARK}; border-bottom: 1px solid {C.BORDER_B};")
         lay = QHBoxLayout(w)
-        lay.setContentsMargins(16, 0, 16, 0)
+        lay.setContentsMargins(16, 4, 16, 4)
 
         def _badge(txt, color=C.TEXT_MED):
             l = QLabel(txt)
@@ -1453,18 +1453,21 @@ class MainWindow(QMainWindow):
             l.setStyleSheet(f"color: {color}; background: transparent;")
             return l
 
-        lay.addWidget(_badge("MARK XXXIX", C.PRI_DIM))
+        left = QVBoxLayout(); left.setSpacing(1)
+        left.addWidget(_badge("JOEL DIGITALS", C.PRI_DIM))
+        left.addWidget(_badge("v2.0", C.TEXT_DIM))
+        lay.addLayout(left)
         lay.addStretch()
 
         mid = QVBoxLayout(); mid.setSpacing(1)
-        title = QLabel("J.A.R.V.I.S")
+        title = QLabel("JARVIS")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setFont(QFont("Courier New", 17, QFont.Weight.Bold))
+        title.setFont(QFont("Courier New", 20, QFont.Weight.Bold))
         title.setStyleSheet(f"color: {C.PRI}; background: transparent;")
         mid.addWidget(title)
-        sub = QLabel("Just A Rather Very Intelligent System")
+        sub = QLabel("Joel Digitals · KI-Assistent")
         sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sub.setFont(QFont("Courier New", 7))
+        sub.setFont(QFont("Courier New", 8))
         sub.setStyleSheet(f"color: {C.PRI_DIM}; background: transparent;")
         mid.addWidget(sub)
         lay.addLayout(mid)
@@ -1472,12 +1475,12 @@ class MainWindow(QMainWindow):
 
         right_col = QVBoxLayout(); right_col.setSpacing(2)
         self._clock_lbl = QLabel("00:00:00")
-        self._clock_lbl.setFont(QFont("Courier New", 14, QFont.Weight.Bold))
+        self._clock_lbl.setFont(QFont("Courier New", 16, QFont.Weight.Bold))
         self._clock_lbl.setStyleSheet(f"color: {C.PRI}; background: transparent;")
         self._clock_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
         right_col.addWidget(self._clock_lbl)
         self._date_lbl = QLabel("")
-        self._date_lbl.setFont(QFont("Courier New", 7))
+        self._date_lbl.setFont(QFont("Courier New", 8))
         self._date_lbl.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
         self._date_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
         right_col.addWidget(self._date_lbl)
@@ -1497,7 +1500,7 @@ class MainWindow(QMainWindow):
         lay.setSpacing(6)
 
         hdr = QLabel("◈ SYSTEM")
-        hdr.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        hdr.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
         hdr.setStyleSheet(f"color: {C.PRI}; background: transparent; "
                           f"border-bottom: 1px solid {C.BORDER}; padding-bottom: 4px;")
         lay.addWidget(hdr)
@@ -1524,18 +1527,18 @@ class MainWindow(QMainWindow):
         ip_lay.setSpacing(3)
 
         self._uptime_lbl = QLabel("UP  --:--")
-        self._uptime_lbl.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        self._uptime_lbl.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
         self._uptime_lbl.setStyleSheet(f"color: {C.GREEN}; background: transparent; border: none;")
         ip_lay.addWidget(self._uptime_lbl)
 
         self._proc_lbl = QLabel("PROC  --")
-        self._proc_lbl.setFont(QFont("Courier New", 8))
+        self._proc_lbl.setFont(QFont("Courier New", 9))
         self._proc_lbl.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent; border: none;")
         ip_lay.addWidget(self._proc_lbl)
 
         os_name = {"Windows": "WIN", "Darwin": "macOS", "Linux": "LINUX"}.get(_OS, _OS.upper())
         os_lbl = QLabel(f"OS  {os_name}")
-        os_lbl.setFont(QFont("Courier New", 8))
+        os_lbl.setFont(QFont("Courier New", 9))
         os_lbl.setStyleSheet(f"color: {C.ACC2}; background: transparent; border: none;")
         ip_lay.addWidget(os_lbl)
 
@@ -1543,12 +1546,12 @@ class MainWindow(QMainWindow):
         lay.addStretch()
 
         for txt, col in [
-            ("KI AKTIV",            C.GREEN),
+            ("KI AKTIV",    C.GREEN),
             ("SICHERHEIT\nOK",      C.PRI),
-            ("PROTOCOL\nXXXVIII",   C.TEXT_DIM),
+            ("JOEL\nDIGITALS",   C.ACC),
         ]:
             lbl = QLabel(txt)
-            lbl.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+            lbl.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lbl.setStyleSheet(
                 f"color: {col}; background: {C.PANEL2};"
@@ -1558,8 +1561,8 @@ class MainWindow(QMainWindow):
 
         lay.addSpacing(8)
         set_btn = QPushButton("⚙  EINSTELLUNGEN")
-        set_btn.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
-        set_btn.setFixedHeight(26)
+        set_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        set_btn.setFixedHeight(28)
         set_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         set_btn.setStyleSheet(f"""
             QPushButton {{
@@ -1584,7 +1587,7 @@ class MainWindow(QMainWindow):
 
         def _sec(txt):
             l = QLabel(f"▸ {txt}")
-            l.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+            l.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
             l.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
             return l
 
@@ -1602,7 +1605,7 @@ class MainWindow(QMainWindow):
         lay.addWidget(self._drop_zone)
 
         self._file_hint = QLabel("Keine Datei geladen — ablegen oder klicken")
-        self._file_hint.setFont(QFont("Courier New", 7))
+        self._file_hint.setFont(QFont("Courier New", 8))
         self._file_hint.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
         self._file_hint.setWordWrap(True)
         lay.addWidget(self._file_hint)
@@ -1616,7 +1619,7 @@ class MainWindow(QMainWindow):
 
         self._mute_btn = QPushButton("🎙  MIKROFON AKTIV")
         self._mute_btn.setFixedHeight(30)
-        self._mute_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        self._mute_btn.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
         self._mute_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._mute_btn.clicked.connect(self._toggle_mute)
         self._style_mute_btn()
@@ -1624,7 +1627,7 @@ class MainWindow(QMainWindow):
 
         fs_btn = QPushButton("⛶  VOLLBILD  [F11]")
         fs_btn.setFixedHeight(26)
-        fs_btn.setFont(QFont("Courier New", 7))
+        fs_btn.setFont(QFont("Courier New", 8))
         fs_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         fs_btn.setStyleSheet(f"""
             QPushButton {{
@@ -1644,7 +1647,7 @@ class MainWindow(QMainWindow):
         row = QHBoxLayout(); row.setSpacing(5)
         self._input = QLineEdit()
         self._input.setPlaceholderText("Befehl oder Frage eingeben…")
-        self._input.setFont(QFont("Courier New", 9))
+        self._input.setFont(QFont("Courier New", 11))
         self._input.setFixedHeight(30)
         self._input.setStyleSheet(f"""
             QLineEdit {{
@@ -1678,15 +1681,15 @@ class MainWindow(QMainWindow):
         lay = QHBoxLayout(w); lay.setContentsMargins(14, 0, 14, 0)
 
         def _fl(txt, color=C.TEXT_MED):
-            l = QLabel(txt); l.setFont(QFont("Courier New", 7))
+            l = QLabel(txt); l.setFont(QFont("Courier New", 8))
             l.setStyleSheet(f"color: {color}; background: transparent;")
             return l
 
         lay.addWidget(_fl("[F4] Stumm  ·  [F11] Vollbild"))
         lay.addStretch()
-        lay.addWidget(_fl("FatihMakes Industries  ·  MARK XXXIX  ·  KLASSIFIZIERT"))
+        lay.addWidget(_fl("Joel Digitals  ·  JARVIS  ·  v2.0"))
         lay.addStretch()
-        lay.addWidget(_fl("© STARK INDUSTRIES", C.PRI_DIM))
+        lay.addWidget(_fl("© JOEL DIGITALS", C.PRI_DIM))
         return w
 
     def _on_file_selected(self, path: str):
