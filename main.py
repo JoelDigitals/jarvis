@@ -116,13 +116,14 @@ TOOL_DECLARATIONS = [
     },
     {
         "name": "weather_report",
-        "description": "Gives the weather report to user",
+        "description": "Gives the weather report to user. Wenn keine Stadt angegeben wird, wird der eingestellte Heimatort verwendet.",
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "city": {"type": "STRING", "description": "City name"}
+                "city": {"type": "STRING", "description": "City name (optional, default: home_location)"},
+                "days": {"type": "INTEGER", "description": "Forecast days (default 1)"}
             },
-            "required": ["city"]
+            "required": []
         }
     },
     {

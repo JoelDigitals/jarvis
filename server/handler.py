@@ -105,7 +105,7 @@ def _execute_action(name: str, args: dict) -> str:
 TOOLS = None
 
 def _make_tools() -> list[dict]:
-    return [
+    declarations = [
         {
             "name": "open_app",
             "description": "Opens any application on the computer. Use this whenever the user asks to open, launch, or start any app, website, or program.",
@@ -320,6 +320,9 @@ def _make_tools() -> list[dict]:
             }
         },
     ]
+    return [types.Tool(function_declarations=[d]) for d in declarations]
+
+TOOLS: list | None = None
 
 def _get_tools():
     global TOOLS

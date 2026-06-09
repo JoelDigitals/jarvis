@@ -5,7 +5,9 @@ def weather_action(parameters: dict, player=None, session_memory=None):
     city = parameters.get("city", "").strip()
     days = int(parameters.get("days", 1))
     if not city:
-        return "Keine Stadt angegeben."
+        city = _get_home_location()
+    if not city:
+        return "Keine Stadt angegeben. Bitte Ort in den Einstellungen festlegen oder direkt angeben."
 
     try:
         # 1. Geocode city → coordinates via OpenStreetMap
@@ -103,3 +105,13 @@ def _day_name(date_str: str) -> str:
         return days[dt.weekday()]
     except:
         return date_str
+
+def _get_home_location() -> str:
+    try:
+        import json, os, sys
+        p = Path(__file__).resolve().parent.parent / "config" / "settings.json"
+        if p.exists():
+            return json.loads(p.read_text(encoding="utf-8")).get("home_location", "")
+    except:
+        pass
+    return ""

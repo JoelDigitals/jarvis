@@ -19,9 +19,11 @@ def _get_secret() -> str:
     try:
         p = _base_dir() / "config" / "settings.json"
         if p.exists():
-            return json.loads(p.read_text(encoding="utf-8")).get("admin_api_secret", "")
+            val = json.loads(p.read_text(encoding="utf-8")).get("admin_api_secret", "")
+            if val:
+                return val
     except: pass
-    return os.environ.get("ADMIN_API_SECRET", "")
+    return os.environ.get("ADMIN_API_SECRET", "") or os.environ.get("admin_api_secret", "")
 
 def _headers() -> dict:
     secret = _get_secret()
