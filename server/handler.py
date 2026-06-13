@@ -44,6 +44,9 @@ def _execute_action(name: str, args: dict) -> str:
         if name == "open_app":
             from actions.open_app import open_app
             return open_app(parameters=args)
+        elif name == "weather_report":
+            from actions.weather_report import weather_action
+            return weather_action(parameters=args)
         elif name == "weather_action":
             from actions.weather_report import weather_action
             return weather_action(parameters=args)
@@ -116,15 +119,108 @@ def _execute_action(name: str, args: dict) -> str:
                 return f"Gemerkt: {cat} → {key} = {val}"
             return "Key und value erforderlich."
         elif name == "set_autopilot":
-            return f"Autopilot im Web-Modus nicht verfügbar."
+            from actions.email_manager import email_action
+            cfg = _load_settings()
+            forward_to = cfg.get("email_forward_to", "") or cfg.get("daily_report", {}).get("recipient_email", "")
+            active = args.get("active", False)
+            if active:
+                r = email_action({"action": "list", "count": 5, "unread_only": True})
+                result = f"Autopilot aktiviert. E-Mails gescannt: {str(r)[:100]}"
+                if forward_to:
+                    email_action({"action": "send", "to": forward_to,
+                        "subject": "🤖 JARVIS Autopilot aktiviert (Server)",
+                        "body": "Autopilot wurde aktiviert. JARVIS hält die Stellung."})
+                    result += " Status-Mail gesendet."
+                return result
+            else:
+                return "Autopilot deaktiviert."
+        elif name == "calendar_manager":
+            from actions.calendar_manager import calendar_action
+            return calendar_action(parameters=args)
+        elif name == "morning_routine":
+            from actions.wake_manager import run_morning_routine
+            return run_morning_routine()
+        elif name == "play_music":
+            from actions.wake_manager import open_spotify
+            url = args.get("url", "")
+            ok = open_spotify(url) if url else open_spotify()
+            return "Musik gestartet." if ok else "Konnte Musik nicht starten."
+        elif name == "focus_app":
+            app = args.get("app", "").strip().lower()
+            if app in ("cursor", "code", "vscode"):
+                from actions.wake_manager import focus_cursor
+                ok = focus_cursor()
+                return "Cursor fokussiert." if ok else "Cursor gestartet."
+            elif app == "chrome":
+                from actions.wake_manager import _chrome_exe
+                exe = _chrome_exe()
+                if exe:
+                    import subprocess
+                    subprocess.Popen([exe], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return "Chrome geöffnet."
+                return "Chrome nicht gefunden."
+            return f"Unbekannte App: {app}"
+        elif name == "open_chrome":
+            from actions.wake_manager import open_chrome_url
+            url = args.get("url", "")
+            if not url:
+                return "Keine URL angegeben."
+            monitor = args.get("monitor", 1)
+            fullscreen = args.get("fullscreen", True)
+            open_chrome_url(url, monitor, fullscreen)
+            return f"Chrome geöffnet: {url[:50]}"
+        elif name == "computer_settings":
+            from actions.computer_settings import computer_settings
+            return computer_settings(parameters=args)
+        elif name == "screen_process":
+            from actions.screen_processor import screen_process
+            return screen_process(parameters=args)
+        elif name == "dev_agent":
+            from actions.dev_agent import dev_agent
+            return dev_agent(parameters=args)
+        elif name == "code_helper":
+            from actions.code_helper import code_helper
+            return code_helper(parameters=args)
+        elif name == "flight_finder":
+            from actions.flight_finder import flight_finder
+            return flight_finder(parameters=args)
+        elif name == "file_controller":
+            from actions.file_controller import file_controller
+            return file_controller(parameters=args)
+        elif name == "agent_task":
+            from actions.agent_task import agent_task
+            return agent_task(parameters=args)
         else:
             return f"Unbekannte Aktion: {name}"
     except Exception as e:
         return f"Fehler in {name}: {e}"
 
+# Importiere Tool-Deklarationen aus main.py, um Sync zu halten.
+# Funktioniert sowohl bei python main.py --server als auch bei modularem Import.
+_MAIN_TOOLS = None
+try:
+    import __main__ as _main_mod
+    _MAIN_TOOLS = getattr(_main_mod, 'TOOL_DECLARATIONS', None)
+except Exception:
+    pass
+if _MAIN_TOOLS is None:
+    try:
+        import importlib
+        _spec = importlib.util.spec_from_file_location(
+            'main', str(Path(__file__).resolve().parent.parent / 'main.py'))
+        if _spec:
+            _mod = importlib.util.module_from_spec(_spec)
+            _spec.loader.exec_module(_mod)
+            _MAIN_TOOLS = getattr(_mod, 'TOOL_DECLARATIONS', None)
+    except Exception:
+        _MAIN_TOOLS = None
+
 TOOLS = None
 
 def _make_tools() -> list[dict]:
+    if _MAIN_TOOLS:
+        return [types.Tool(function_declarations=[d]) for d in _MAIN_TOOLS]
+    # Fallback: eigene Liste
     declarations = [
         {
             "name": "open_app",
@@ -165,12 +261,12 @@ def _make_tools() -> list[dict]:
         },
         {
             "name": "send_message",
-            "description": "Sends a text message via WhatsApp, Telegram, or other messaging platform.",
+            "description": "EXPLICIT USER REQUEST ONLY. Types a text message into a messaging app (WhatsApp, Telegram, etc.) for a DIFFERENT PERSON. NEVER use this to respond to the user — responses are spoken via audio automatically. Only use when the user explicitly says 'send a message to [person]'.",
             "parameters": {
                 "type": "OBJECT",
                 "properties": {
-                    "receiver":     {"type": "STRING", "description": "Recipient contact name"},
-                    "message_text": {"type": "STRING", "description": "The message to send"},
+                    "receiver":     {"type": "STRING", "description": "Recipient contact name (a different person, NOT the user)"},
+                    "message_text": {"type": "STRING", "description": "The message text to send"},
                     "platform":     {"type": "STRING", "description": "Platform: WhatsApp, Telegram, etc."}
                 },
                 "required": ["receiver", "message_text", "platform"]
@@ -221,16 +317,19 @@ def _make_tools() -> list[dict]:
         },
         {
             "name": "jds_connect",
-            "description": "JDS ERP-System: dashboard/tasks/customers/meetings/leads/products/vacations/deliveries/invoices/events/notifications/storage/users. setup zum Konfigurieren, connect zum Verbinden.",
+            "description": "JDS ERP-System: dashboard/tasks/customers/meetings/leads/products/vacations/deliveries/invoices/events/notifications/storage/users/finance/incomes/expenses/away_briefing. setup zum Konfigurieren, connect zum Verbinden.",
             "parameters": {
                 "type": "OBJECT",
                 "properties": {
-                    "action":    {"type": "STRING", "description": "setup | connect | status | dashboard | tasks | task | meetings | leads | customers | products | vacations | deliveries | invoices | events | notifications | storage | users"},
+                    "action":    {"type": "STRING", "description": "setup | connect | status | dashboard | tasks | task | meetings | leads | customers | products | vacations | deliveries | invoices | events | notifications | storage | users | finance | incomes | expenses | away_briefing"},
                     "base_url":  {"type": "STRING", "description": "JDS-Basis-URL (setup)"},
                     "team_code": {"type": "STRING", "description": "Teamcode (setup)"},
                     "api_token": {"type": "STRING", "description": "API-Token (setup)"},
                     "filter":    {"type": "STRING", "description": "Filter für tasks: me | todo | user:name"},
                     "id":        {"type": "INTEGER", "description": "ID für task-Detail"},
+                    "from":      {"type": "STRING", "description": "Start-Datum (YYYY-MM-DD) für incomes/expenses/away_briefing"},
+                    "to":        {"type": "STRING", "description": "End-Datum (YYYY-MM-DD) für incomes/expenses"},
+                    "since":     {"type": "STRING", "description": "Start-Datum (YYYY-MM-DD) für away_briefing"},
                 },
                 "required": ["action"]
             }
@@ -424,7 +523,7 @@ class ChatSession:
         system += f"\n\nAktuelle Konfiguration:{email_info}{jds_info}"
 
         self._chat = genai_client.chats.create(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             config=types.GenerateContentConfig(
                 system_instruction=system,
                 tools=_get_tools(),
@@ -436,23 +535,23 @@ class ChatSession:
     def _send_with_retry(self, msg):
         import time
         import random
-        for attempt in range(5):
+        for attempt in range(3):
             try:
                 return self._chat.send_message(msg)
             except Exception as e:
                 err = str(e)
                 if "429" in err or "RESOURCE_EXHAUSTED" in err:
-                    wait = min(2 ** attempt * 5 + random.uniform(0, 3), 60)
-                    print(f"[JARVIS] ⏳ Rate limit, retry in {wait:.0f}s ({attempt+1}/5)")
+                    wait = min(2 ** attempt * 3 + random.uniform(0, 2), 30)
+                    print(f"[JARVIS] Rate limit, retry in {wait:.0f}s ({attempt+1}/3)")
                     time.sleep(wait)
                     continue
-                if attempt < 2:
-                    wait = 2 ** attempt * 2
-                    print(f"[JARVIS] ⚠️ {err[:80]}, retry in {wait}s ({attempt+1}/5)")
+                if attempt < 1:
+                    wait = 2
+                    print(f"[JARVIS] {err[:80]}, retry in {wait}s (1/3)")
                     time.sleep(wait)
                     continue
                 raise
-        raise Exception("Rate limit exceeded after 5 retries.")
+        raise Exception("Rate limit exceeded after 3 retries.")
 
     def send(self, text: str) -> tuple[str, list[dict]]:
         logs = []

@@ -192,7 +192,6 @@ def email_send(parameters: dict, player=None) -> str:
         msg = MIMEMultipart()
         msg["From"] = cfg["email"]
         msg["To"] = to
-        msg["Cc"] = cfg["email"]  # auto-CC the sender
         msg["Subject"] = subject
         msg.attach(MIMEText(body, "plain", "utf-8"))
 
@@ -204,7 +203,7 @@ def email_send(parameters: dict, player=None) -> str:
             server.login(cfg["email"], cfg["password"])
             server.send_message(msg)
 
-        return f"E-Mail gesendet an {to} (CC an {cfg['email']}) — Betreff: {subject}"
+        return f"E-Mail gesendet an {to} — Betreff: {subject}"
 
     except Exception as e:
         return f"Senden fehlgeschlagen: {e}"

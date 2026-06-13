@@ -3,6 +3,22 @@
     "favorite_joke_rockenheimer_ring": {
       "value": "Joel's bakery rockenheimer ring joke context",
       "updated": "2026-06-09 15:51"
+    },
+    "status_rechnungssuche": {
+      "value": "completed by user",
+      "updated": "2026-06-12 22:54"
+    }
+  },
+  "company": {
+    "description": {
+      "value": "Digital agency from Saarland, specializing in websites, web design, web development, and AI development (creator of JARVIS)",
+      "updated": "2026-06-09 16:43"
+    }
+  },
+  "customers": {
+    "marcel_junk_info": {
+      "value": "Local council in Dörsdorf, local head (Ortsvorsteher) of Dörsdorf, contact for doersdorf.de website",
+      "updated": "2026-06-09 22:41"
     }
   }
 }

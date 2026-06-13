@@ -175,12 +175,12 @@ TOOL_DECLARATIONS = [
     },
     {
         "name": "send_message",
-        "description": "Sends a text message via WhatsApp, Telegram, or other messaging platform.",
+        "description": "EXPLICIT USER REQUEST ONLY. Types a text message into a messaging app (WhatsApp, Telegram, etc.) for a DIFFERENT PERSON. NEVER use this to respond to the user — responses are spoken via audio automatically. Only use when the user explicitly says 'send a message to [person]'.",
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "receiver":     {"type": "STRING", "description": "Recipient contact name"},
-                "message_text": {"type": "STRING", "description": "The message to send"},
+                "receiver":     {"type": "STRING", "description": "Recipient contact name (a different person, NOT the user)"},
+                "message_text": {"type": "STRING", "description": "The message text to send"},
                 "platform":     {"type": "STRING", "description": "Platform: WhatsApp, Telegram, etc."}
             },
             "required": ["receiver", "message_text", "platform"]
@@ -601,13 +601,14 @@ TOOL_DECLARATIONS = [
             "JDS CRM- & Management-System. Aktionen: setup, connect, status, "
             "dashboard (Übersicht), tasks (meine Aufgaben), task (einzelne), "
             "meetings (Termine), events (Kalender), leads, customers, products, "
-            "vacations, deliveries, invoices, notifications, storage, users. "
-            "Für Briefing/Kalender: events(days=7) + meetings aufrufen."
+            "vacations, deliveries, invoices, notifications, storage, users, "
+            "finance (Umsatz gestern/heute), incomes, expenses, away_briefing. "
+            "Für Briefing/Kalender: events(days=7) + meetings + finance aufrufen."
         ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "action":    {"type": "STRING", "description": "setup | connect | status | dashboard | tasks | task | meetings | leads | customers | products | vacations | deliveries | invoices | events | notifications | storage | users"},
+                "action":    {"type": "STRING", "description": "setup | connect | status | dashboard | tasks | task | meetings | leads | customers | products | vacations | deliveries | invoices | events | notifications | storage | users | finance | incomes | expenses | away_briefing"},
                 "base_url":  {"type": "STRING", "description": "Basis-URL für setup (z.B. https://jds.example.com)"},
                 "team_code": {"type": "STRING", "description": "Team-UUID für setup"},
                 "api_token": {"type": "STRING", "description": "API-Token für setup"},
@@ -619,6 +620,9 @@ TOOL_DECLARATIONS = [
                 "stage":     {"type": "STRING", "description": "Stage für leads (new, contacted, qualified)"},
                 "status":    {"type": "STRING", "description": "Status für invoices/vacations"},
                 "days":      {"type": "INTEGER", "description": "Tage für events (default: 7)"},
+                "from":      {"type": "STRING", "description": "Start-Datum (YYYY-MM-DD) für incomes/expenses/away_briefing"},
+                "to":        {"type": "STRING", "description": "End-Datum (YYYY-MM-DD) für incomes/expenses"},
+                "since":     {"type": "STRING", "description": "Start-Datum (YYYY-MM-DD) für away_briefing — seit wann warst du weg"},
             },
             "required": ["action"]
         }
@@ -745,6 +749,35 @@ TOOL_DECLARATIONS = [
         }
     },
     {
+        "name": "calendar_manager",
+        "description": (
+            "Google Kalender Integration. Aktionen:\n"
+            "- list: Termine der nächsten Tage (Parameter: days=7, max=10)\n"
+            "- today: Heutige Termine\n"
+            "- create: Neuen Termin (summary=Titel, start=Startzeit, end=Endzeit, location=Ort, description=Notiz)\n"
+            "- update: Termin ändern (event_id, summary, start, end, location, description)\n"
+            "- delete: Termin löschen (event_id)\n"
+            "- find: Termin suchen (query=Suchbegriff)\n"
+            "Datumsformat für start/end: ISO 8601 (z.B. 2025-06-12T14:00:00 oder 2025-06-12)"
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {"type": "STRING", "description": "list | today | create | update | delete | find"},
+                "summary": {"type": "STRING", "description": "Titel des Termins (bei create/update)"},
+                "start": {"type": "STRING", "description": "Startzeit im ISO-Format (z.B. 2025-06-12T14:00:00)"},
+                "end": {"type": "STRING", "description": "Endzeit im ISO-Format"},
+                "location": {"type": "STRING", "description": "Ort (optional)"},
+                "description": {"type": "STRING", "description": "Beschreibung/Notiz (optional)"},
+                "days": {"type": "INTEGER", "description": "Anzahl Tage für list (default: 7)"},
+                "max": {"type": "INTEGER", "description": "Maximale Anzahl Termine (default: 10)"},
+                "query": {"type": "STRING", "description": "Suchbegriff für find"},
+                "event_id": {"type": "STRING", "description": "Event-ID für update/delete"},
+            },
+            "required": ["action"]
+        }
+    },
+    {
         "name": "set_autopilot",
         "description": (
             "Aktiviert/deaktiviert den Autopilot-Modus. Wenn aktiv, arbeitet JARVIS "
@@ -759,6 +792,68 @@ TOOL_DECLARATIONS = [
                 "active": {"type": "BOOLEAN", "description": "true = aktivieren, false = deaktivieren"},
             },
             "required": ["active"]
+        }
+    },
+    {
+        "name": "morning_routine",
+        "description": (
+            "Liest das Morgen-Briefing vor: Wetter, Kalender-Termine, "
+            "Admin-Dashboard, JDS-Aufgaben und E-Mails. "
+            "Rufe dies NUR auf, wenn der Nutzer explizit danach fragt."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {},
+        }
+    },
+    {
+        "name": "play_music",
+        "description": (
+            "Spielt Musik ab. Ohne Parameter wird die Standard-Spotify-URI "
+            "verwendet. Mit dem Parameter 'url' kann eine beliebige Spotify- "
+            "oder YouTube-URL abgespielt werden."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "url": {"type": "STRING", "description": "Spotify/YouTube URL (optional)"},
+            },
+        }
+    },
+    {
+        "name": "focus_app",
+        "description": (
+            "Fokussiert ein bestimmtes Fenster oder startet es. "
+            "Verfügbare Optionen: 'cursor' (VS Code/Cursor), "
+            "'chrome', 'code'. Ruft das Fenster in den Vordergrund "
+            "und aktiviert den Vollbildmodus."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "app": {
+                    "type": "STRING",
+                    "description": "cursor | chrome | code"
+                },
+            },
+            "required": ["app"]
+        }
+    },
+    {
+        "name": "open_chrome",
+        "description": (
+            "Öffnet eine URL in Google Chrome auf einem bestimmten Monitor "
+            "im Vollbildmodus. Monitor-Nummern sind 1-basiert "
+            "(1 = links, 2 = mitte, 3 = rechts)."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "url": {"type": "STRING", "description": "Vollständige URL"},
+                "monitor": {"type": "INTEGER", "description": "Monitor-Nummer (1, 2, 3, ...)"},
+                "fullscreen": {"type": "BOOLEAN", "description": "Vollbild (default: true)"},
+            },
+            "required": ["url"]
         }
     },
 ]
@@ -783,6 +878,13 @@ class JarvisLive:
         self._autopilot_active = False
         self._mic_hold_until = 0.0  # Timestamp bis wann Mic-Input ignoriert wird (Echo-Schutz)
         self._last_wake_trigger = 0.0  # Cooldown für Google-STT-Wake
+        self._quiet_hours_start = 22  # 22:00
+        self._quiet_hours_end   = 7   # 07:00
+        self._night_voice_until = 0.0  # Timestamp bis wann Audio nachts erlaubt ist (0 = blockiert)
+        self._night_logged = False      # Ob Nachtmodus-Log bereits geschrieben wurde
+        self._user_has_spoken = False    # Ob Nutzer in aktueller Session schon Input gesendet hat
+        self._suppress_response = False
+        self._initialized = False        # Ob Setup (Timer etc.) bereits einmal ausgeführt wurde
         self.ui.on_mic_unmute = self._flush_wake_buffer
 
     def _start_wake_listener(self):
@@ -859,6 +961,7 @@ class JarvisLive:
     def _on_text_command(self, text: str):
         if not self._loop or not self.session:
             return
+        self._user_has_spoken = True
         try:
             asyncio.run_coroutine_threadsafe(
                 self.session.send_client_content(
@@ -892,16 +995,26 @@ class JarvisLive:
             if q in self._response_queues:
                 self._response_queues.remove(q)
 
+    def _is_quiet_hours(self) -> bool:
+        from datetime import datetime
+        h = datetime.now().hour
+        if self._quiet_hours_start > self._quiet_hours_end:
+            return h >= self._quiet_hours_start or h < self._quiet_hours_end
+        return self._quiet_hours_start <= h < self._quiet_hours_end
+
     def set_speaking(self, value: bool):
         with self._speaking_lock:
             self._is_speaking = value
-        if value:
-            self.ui.set_state("SPEAKING")
-            self._start_wake_listener()
-        elif not self.ui.muted:
-            self._stop_wake_listener()
-            self._mic_hold_until = time.time() + 0.6  # 600ms Totzeit nach Sprechen (Echo-Schutz)
-            self.ui.set_state("LISTENING")
+        try:
+            if value:
+                self._safe_set_state("SPEAKING")
+                self._start_wake_listener()
+            elif not self.ui.muted:
+                self._stop_wake_listener()
+                self._mic_hold_until = time.time() + 1.0
+                self._safe_set_state("LISTENING")
+        except RuntimeError:
+            pass
 
     def speak(self, text: str):
         if not self._loop or not self.session:
@@ -959,12 +1072,19 @@ class JarvisLive:
             ),
         )
 
+    def _safe_set_state(self, state: str):
+        try:
+            self.ui.set_state(state)
+        except Exception:
+            pass
+
     async def _execute_tool(self, fc) -> types.FunctionResponse:
         name = fc.name
         args = dict(fc.args or {})
 
         print(f"[JARVIS] 🔧 {name}  {args}")
-        self.ui.set_state("THINKING")
+        self._safe_set_state("THINKING")
+
         if name == "save_memory":
             category = args.get("category", "notes")
             key      = args.get("key", "")
@@ -973,7 +1093,7 @@ class JarvisLive:
                 update_memory({category: {key: {"value": value}}})
                 print(f"[Memory] 💾 save_memory: {category}/{key} = {value}")
             if not self.ui.muted:
-                self.ui.set_state("LISTENING")
+                self._safe_set_state("LISTENING")
             return types.FunctionResponse(
                 id=fc.id, name=name,
                 response={"result": "ok", "silent": True}
@@ -983,7 +1103,7 @@ class JarvisLive:
             from actions.knowledge_base import kb_action
             r = kb_action(args, player=self.ui)
             if not self.ui.muted:
-                self.ui.set_state("LISTENING")
+                self._safe_set_state("LISTENING")
             return types.FunctionResponse(
                 id=fc.id, name=name,
                 response={"result": r}
@@ -993,7 +1113,7 @@ class JarvisLive:
             active = args.get("active", False)
             summary = self._set_autopilot(active)
             if not self.ui.muted:
-                self.ui.set_state("LISTENING")
+                self._safe_set_state("LISTENING")
             return types.FunctionResponse(
                 id=fc.id, name=name,
                 response={"result": summary if not active else "Autopilot aktiviert"}
@@ -1157,6 +1277,51 @@ class JarvisLive:
                 r = await loop.run_in_executor(None, lambda: do_briefing(parameters=args, player=self.ui))
                 result = (r or "").strip()
 
+            elif name == "morning_routine":
+                from actions.briefing_action import do_briefing
+                r = await loop.run_in_executor(None, lambda: do_briefing({"greeting": "Guten Morgen"}, player=self.ui))
+                result = r or "Morgen-Briefing abgeschlossen."
+
+            elif name == "play_music":
+                from actions.wake_manager import open_spotify
+                url = args.get("url", "")
+                r = await loop.run_in_executor(None, lambda: open_spotify(url) if url else open_spotify())
+                result = "Musik gestartet." if r else "Konnte Musik nicht starten."
+
+            elif name == "focus_app":
+                app = args.get("app", "").strip().lower()
+                if app in ("cursor", "code", "vscode"):
+                    from actions.wake_manager import focus_cursor
+                    r = await loop.run_in_executor(None, focus_cursor)
+                    result = "Cursor fokussiert." if r else "Cursor gestartet."
+                elif app == "chrome":
+                    from actions.wake_manager import _chrome_exe
+                    exe = await loop.run_in_executor(None, _chrome_exe)
+                    if exe:
+                        import subprocess
+                        subprocess.Popen([exe], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        result = "Chrome geöffnet."
+                    else:
+                        result = "Chrome nicht gefunden."
+                else:
+                    result = f"Unbekannte App: {app}"
+
+            elif name == "open_chrome":
+                url = args.get("url", "")
+                monitor = args.get("monitor", 1)
+                fullscreen = args.get("fullscreen", True)
+                if url:
+                    from actions.wake_manager import open_chrome_url
+                    await loop.run_in_executor(None, lambda: open_chrome_url(url, monitor, fullscreen))
+                    result = f"Chrome geöffnet: {url[:50]}"
+                else:
+                    result = "Keine URL angegeben."
+
+            elif name == "calendar_manager":
+                from actions.calendar_manager import calendar_action
+                r = await loop.run_in_executor(None, lambda: calendar_action(parameters=args, player=self.ui))
+                result = r or "Done."
+
             elif name == "shutdown_jarvis":
                 self.ui.write_log("SYS: Herunterfahren angefordert.")
                 self.speak("Auf Wiedersehen, Sir.")
@@ -1178,7 +1343,7 @@ class JarvisLive:
         self._log_autopilot(f"{name}: {str(result)[:60]}")
 
         if not self.ui.muted:
-            self.ui.set_state("LISTENING")
+            self._safe_set_state("LISTENING")
 
         print(f"[JARVIS] 📤 {name} → {str(result)[:80]}")
 
@@ -1214,6 +1379,11 @@ class JarvisLive:
             except asyncio.QueueFull:
                 pass
 
+        try:
+            from actions.wecker import is_radio_playing as _check_radio
+        except Exception:
+            _check_radio = lambda: False
+
         def callback(indata, frames, time_info, status):
             if self.ui.muted:
                 return
@@ -1222,6 +1392,13 @@ class JarvisLive:
             if self._is_speaking or time.time() < self._mic_hold_until:
                 self._wake_buffer.append(data)
                 return
+            # Während Radio läuft: Audio nur an Wake-Buffer, nicht an Gemini (verhindert Fehlauslösung durch Radiosprache)
+            if _check_radio():
+                self._wake_buffer.append(data)
+                return
+            if self._is_quiet_hours():
+                self._night_voice_until = time.time() + 20.0
+            self._user_has_spoken = True
             try:
                 loop.call_soon_threadsafe(_safe_put, {"data": data, "mime_type": f"audio/pcm;rate={SEND_SAMPLE_RATE}"})
             except RuntimeError:
@@ -1250,8 +1427,9 @@ class JarvisLive:
                 async for response in self.session.receive():
 
                     if response.data and isinstance(response.data, bytes) and len(response.data) > 0:
-                        self.set_speaking(True)
-                        self.audio_buf.put(response.data)
+                        if self._user_has_spoken:
+                            self.set_speaking(True)
+                            self.audio_buf.put(response.data)
 
                     if response.server_content:
                         sc = response.server_content
@@ -1362,6 +1540,14 @@ class JarvisLive:
                         raise
                 if not self._is_speaking:
                     self.set_speaking(True)
+                if self._is_quiet_hours():
+                    if time.time() > self._night_voice_until:
+                        if not self._night_logged:
+                            self.ui.write_log("[🌙] Nachtmodus aktiv – Audio stumm (sprich um Antwort zu hören)")
+                            self._night_logged = True
+                        continue
+                    elif self._night_logged:
+                        self._night_logged = False
                 await asyncio.to_thread(stream.write, chunk)
         except Exception as e:
             print(f"[JARVIS] ❌ Play: {e}")
@@ -1378,7 +1564,7 @@ class JarvisLive:
             delay = (next_hour - now).total_seconds()
 
             def _tick():
-                if not self.ui.muted:
+                if not self.ui.muted and not self._is_quiet_hours():
                     self.speak("Sir, es ist Zeit etwas zu trinken! Bleiben Sie hydriert.")
                     self.ui.write_log("SYS: Trink-Erinnerung 🔔")
                 threading.Timer(3600.0, _tick).start()
@@ -1419,7 +1605,7 @@ class JarvisLive:
                         r = weather_action({"parameters": {}}, player=self.ui)
                         parts.append(r)
                     if inc_eml:
-                        r = email_action({"action": "list", "count": 3, "unread_only": True}, player=self.ui)
+                        r = email_action({"action": "list", "count": 3, "unread_only": False}, player=self.ui)
                         parts.append(r)
 
                     body = "\n\n---\n\n".join(parts)
@@ -1459,11 +1645,15 @@ class JarvisLive:
             self._email_scan_count = 0
             self._email_scan_log = []
             self._email_scan_replied = set()
+            self._email_scan_gen = getattr(self, "_email_scan_gen", 0) + 1
+            _my_gen = self._email_scan_gen
 
             cfg = load_cfg()
             self._email_forward_to = cfg.get("email_forward_to", "") or cfg.get("daily_report", {}).get("recipient_email", "")
 
             def _scan():
+                if self._email_scan_gen != _my_gen:
+                    return
                 try:
                     r = email_action({"action": "list", "count": 5, "unread_only": True}, player=self.ui)
                     self._email_scan_count += 1
@@ -1515,6 +1705,7 @@ class JarvisLive:
             def _forward_unread(ea):
                 if not self._email_forward_to:
                     return
+                is_auto = bool(getattr(self, "_autopilot_active", False))
                 for idx in range(1, 4):
                     try:
                         raw = ea({"action": "read", "index": idx, "unread_only": True}, player=self.ui)
@@ -1534,26 +1725,28 @@ class JarvisLive:
                             continue
                         self._email_scan_replied.add(uid)
 
-                        if not _is_important(sender, subject, raw):
+                        if not is_auto and not _is_important(sender, subject, raw):
                             print(f"[EMAIL-SCAN] ⏭ Unwichtig: {subject} von {sender}")
                             continue
 
+                        tag = "AUTOPILOT" if is_auto else "Autopilot"
                         fwd_body = (
-                            f"--- WEITERGELEITETE KUNDENANFRAGE (Autopilot) ---\n\n"
+                            f"--- WEITERGELEITETE KUNDENANFRAGE ({tag}) ---\n\n"
                             f"{raw}\n\n"
                             f"--- Ende der Weiterleitung ---\n\n"
                             f"Diese E-Mail wurde automatisch vom JARVIS-Assistenten "
-                            f"weitergeleitet, da der Autopilot-Modus aktiv ist."
+                            f"weitergeleitet."
                         )
                         ea({"action": "send", "to": self._email_forward_to,
                             "subject": f"✉ {subject} (weitergeleitet von {sender})",
                             "body": fwd_body}, player=self.ui)
                         self._log_autopilot(f"E-Mail weitergeleitet: {subject} von {sender}")
                         self.ui.write_log(f"SYS: E-Mail weitergeleitet → {self._email_forward_to}")
-                        print(f"[EMAIL-SCAN] ✅ Wichtig: {subject} von {sender}")
+                        print(f"[EMAIL-SCAN] ✅ {'Autopilot' if is_auto else 'Wichtig'}: {subject} von {sender}")
                     except:
                         pass
 
+            self._email_scan_fn = _scan
             threading.Timer(900.0, _scan).start()
             print("[EMAIL-SCAN] ✅ Scan alle 15 Minuten aktiv")
             if self._email_forward_to:
@@ -1569,16 +1762,43 @@ class JarvisLive:
             self._autopilot_log = []
             print(f"[AUTOPILOT] ✅ Aktiviert — JARVIS hält Stellung")
             self.ui.write_log("SYS: AUTOPILOT AKTIV — JARVIS hält Stellung")
+            threading.Thread(target=self._run_autopilot_start, daemon=True).start()
         else:
-            summary = "\n".join(self._autopilot_log[-20:]) if hasattr(self, "_autopilot_log") else "Keine Aktionen."
+            summary = "\n".join(self._autopilot_log[-50:]) if hasattr(self, "_autopilot_log") else "Keine Aktionen."
             print(f"[AUTOPILOT] Deaktiviert.\n{summary}")
             self.ui.write_log(f"SYS: Autopilot beendet")
+            threading.Thread(target=self._send_autopilot_summary, args=(summary,), daemon=True).start()
             return summary
 
     def _log_autopilot(self, action: str):
         if getattr(self, "_autopilot_active", False):
             ts = time.strftime("%H:%M")
             self._autopilot_log.append(f"[{ts}] {action}")
+
+    def _run_autopilot_start(self):
+        try:
+            from actions.email_manager import email_action
+            if hasattr(self, "_email_scan_fn"):
+                self._email_scan_fn()
+            self._log_autopilot("E-Mail-Scan durchgeführt")
+        except Exception as e:
+            print(f"[AUTOPILOT] ⚠️ Scan-Fehler: {e}")
+        try:
+            from actions.jds_client import jds_connect
+            r = jds_connect({"action": "dashboard"})
+            self._log_autopilot(f"JDS-Dashboard: {str(r)[:150]}")
+        except Exception as e:
+            print(f"[AUTOPILOT] ⚠️ JDS-Fehler: {e}")
+        try:
+            from actions.admin_api import admin_action
+            r = admin_action({"action": "tickets"})
+            self._log_autopilot(f"Support-Tickets: {str(r)[:150]}")
+        except Exception as e:
+            print(f"[AUTOPILOT] ⚠️ Admin-Fehler: {e}")
+        self._log_autopilot("Autopilot gestartet (E-Mail deaktiviert)")
+
+    def _send_autopilot_summary(self, summary: str):
+        pass
 
     def _connect_jds(self):
         try:
@@ -1644,6 +1864,34 @@ class JarvisLive:
         tg = asyncio.create_task(self._discord.start())
         print("[DISCORD] 🤖 Bot gestartet (sofern Token gesetzt)")
 
+    def _setup_clap_detection(self):
+        try:
+            from actions.wake_manager import start_clap_detection, stop_clap_detection
+            _last_clap = 0.0
+            def _on_clap():
+                nonlocal _last_clap
+                now = time.time()
+                if now - _last_clap < 10.0:
+                    return
+                _last_clap = now
+                if self.ui.muted:
+                    print("[WAKE] 🔇 Mic stumm — Clap ignoriert")
+                    return
+                if self._loop and self.session and not self._is_speaking:
+                    self._user_has_spoken = True
+                    txt = "Aufwachen!"
+                    asyncio.run_coroutine_threadsafe(
+                        self.session.send_client_content(
+                            turns=types.ContentDict(role="user", parts=[types.PartDict(text=txt)]),
+                            turn_complete=True
+                        ),
+                        self._loop
+                    )
+                    print("[WAKE] 👏 Clap → Gemini gesendet")
+            start_clap_detection(callback=_on_clap)
+        except Exception as e:
+            print(f"[WAKE] ⚠️ Clap-Setup: {e}")
+
     async def _gc_loop(self):
         while True:
             await asyncio.sleep(120)
@@ -1659,7 +1907,7 @@ class JarvisLive:
         while True:
             try:
                 print("[JARVIS] 🔌 Connecting...")
-                self.ui.set_state("THINKING")
+                self._safe_set_state("THINKING")
                 config = self._build_config()
 
                 async with (
@@ -1670,28 +1918,24 @@ class JarvisLive:
                     self._loop          = asyncio.get_event_loop()
                     self.audio_buf      = _AudioBuffer()
                     self.out_queue      = asyncio.Queue(maxsize=10)
+                    self._user_has_spoken = False
+                    self._wake_buffer.clear()
 
                     print("[JARVIS] ✅ Connected.")
-                    self.ui.set_state("LISTENING")
+                    self._safe_set_state("LISTENING")
                     self.ui.write_log("SYS: JARVIS bereit.")
 
-                    if self._history:
-                        context = self._build_context()
-                        if context:
-                            await session.send_client_content(
-                                turns=types.ContentDict(role="user", parts=[types.PartDict(text=context)]),
-                                turn_complete=True
-                            )
-                            print(f"[JARVIS] 📜 Context restored ({min(len(self._history),20)} turns)")
-
-                    self._setup_hourly_reminder()
-                    self._setup_daily_report()
-                    self._setup_email_scanner()
-                    self._connect_jds()
-                    self._auto_setup_email()
-                    self._start_discord()
-                    from actions.wecker import schedule_all
-                    schedule_all()
+                    if not self._initialized:
+                        self._setup_hourly_reminder()
+                        self._setup_daily_report()
+                        self._setup_email_scanner()
+                        self._start_discord()
+                        self._setup_clap_detection()
+                        from actions.wecker import schedule_all
+                        schedule_all()
+                        self._initialized = True
+                    await asyncio.to_thread(self._connect_jds)
+                    await asyncio.to_thread(self._auto_setup_email)
 
                     tg.create_task(self._send_realtime())
                     tg.create_task(self._listen_audio())
@@ -1705,11 +1949,11 @@ class JarvisLive:
 
             try:
                 self.set_speaking(False)
-                self.ui.set_state("THINKING")
+                self._safe_set_state("THINKING")
             except Exception:
                 pass
-            print("[JARVIS] 🔄 Reconnecting in 3s...")
-            await asyncio.sleep(3)
+            print("[JARVIS] 🔄 Reconnecting in 10s...")
+            await asyncio.sleep(10)
 
 def main():
     import argparse

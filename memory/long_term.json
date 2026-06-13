@@ -1,89 +1,102 @@
 {
-  "identity": {},
+  "identity": {
+    "name": {
+      "value": "Joel",
+      "updated": "2026-06-13"
+    }
+  },
   "preferences": {
-    "humor_style": {
-      "value": "loves puns and wordplay, especially related to the bakery puns joke",
-      "updated": "2026-06-09"
-    }
-  },
-  "projects": {},
-  "relationships": {
-    "girlfriend_activity": {
-      "value": "does climbing training",
-      "updated": "2026-06-09"
+    "autopilot_status": {
+      "value": "active",
+      "updated": "2026-06-12"
     },
-    "girlfriend_name": {
-      "value": "Ayuki",
-      "updated": "2026-06-09"
+    "wants_autopilot_continued": {
+      "value": "true",
+      "updated": "2026-06-12"
+    },
+    "favorite_language": {
+      "value": "German",
+      "updated": "2026-06-13"
     }
   },
+  "projects": {
+    "current_task": {
+      "value": "user improving my code",
+      "updated": "2026-06-12"
+    }
+  },
+  "relationships": {},
   "wishes": {},
   "notes": {
-    "speaks_german": {
-      "value": "asked question in German",
-      "updated": "2026-06-09"
+    "laptop_issue": {
+      "value": "Ace Magic charging port broken, under warranty, needs replacement for work",
+      "updated": "2026-06-11"
     },
-    "abitur_results_date": {
-      "value": "June 9, 2026",
-      "updated": "2026-06-09"
+    "user_returned_confirmed": {
+      "value": "user explicitly confirmed return, autopilot deactivated",
+      "updated": "2026-06-11"
     },
-    "hydration_reminder_set": {
-      "value": "Hourly hydration reminder set.",
-      "updated": "2026-06-09"
+    "status_rechnungssuche": {
+      "value": "user confirmed relevant invoice not found yet in desktop subfolders, searching entire PC next",
+      "updated": "2026-06-11"
     },
-    "laptops_count": {
-      "value": "2",
-      "updated": "2026-06-09"
+    "last_known_status": {
+      "value": "awaiting feedback on invoice search, user mentioned expert/hans",
+      "updated": "2026-06-11"
     },
-    "user_returned": {
-      "value": "User checked in on 2026-06-09 12:44 PM UTC",
-      "updated": "2026-06-09"
+    "active_status_autopilot": {
+      "value": "true",
+      "updated": "2026-06-11"
     },
-    "physics_abi_learning_location": {
-      "value": "school",
-      "updated": "2026-06-09"
+    "last_check_status_ok": {
+      "value": "true",
+      "updated": "2026-06-11"
     },
-    "learning_with_lukas_location": {
-      "value": "home",
-      "updated": "2026-06-09"
+    "freelancermap_task_complete": {
+      "value": "true",
+      "updated": "2026-06-11"
     },
-    "buy_email_access_fix": {
-      "value": "User will grant access to GMX account later",
-      "updated": "2026-06-09"
+    "last_drink_reminder_received": {
+      "value": "2026-06-12 13:56 PM",
+      "updated": "2026-06-12"
     },
-    "abitur_stress_notes": {
-      "value": "Needs 7 points in Politics or 8 points in Physics supplementary exams to pass Abitur and is very stressed. Exam dates added to calendar.",
-      "updated": "2026-06-09"
+    "current_task_focus": {
+      "value": "abi preparations and exam tomorrow",
+      "updated": "2026-06-12"
     },
-    "blog_release_v4_content": {
-      "value": "Content extracted from PDF JDS Management V4.0.0.0 Release Notes. User will publish manually.",
-      "updated": "2026-06-09"
+    "session_status": {
+      "value": "user partially complete with study session",
+      "updated": "2026-06-12"
     },
-    "product_description_priority": {
-      "value": "JDS Management BaseApp for Freelancer needs description review due to low stock/potential sales drive",
-      "updated": "2026-06-09"
+    "user_plan_after_bathroom": {
+      "value": "resume studying, activate autopilot",
+      "updated": "2026-06-12"
     },
-    "context_people_project_support": {
-      "value": "User values people who fully support their projects",
-      "updated": "2026-06-09"
+    "current_activity": {
+      "value": "studying alone, cannot hear speaker",
+      "updated": "2026-06-12"
     },
-    "user_questions_online_status": {
-      "value": "User questioned if I need internet to work and 'hold the fort' (Autopilot)",
-      "updated": "2026-06-09"
+    "last_interaction": {
+      "value": "user returned, check status",
+      "updated": "2026-06-12"
     },
-    "user_schedule_weekly_location_switch": {
-      "value": "User switches location between home and girlfriend's home every Tuesday",
-      "updated": "2026-06-09"
+    "mood_status": {
+      "value": "sad",
+      "updated": "2026-06-12"
+    },
+    "son_mention_portuguese_insult": {
+      "value": "mentioned son, then used severe insult in Portuguese",
+      "updated": "2026-06-12"
     }
   },
-  "credentials": {
-    "joel_digitals_username": {
-      "value": "JoelDigitals",
-      "updated": "2026-06-09"
-    },
-    "joel_digitals_password": {
-      "value": "Jo240207!",
-      "updated": "2026-06-09"
+  "credentials": {},
+  "contacts": {},
+  "hobbies": {},
+  "interests": {},
+  "current_status": {
+    "autopilot_activated_by_user": {
+      "value": "user confirms autopilot activation to focus on studying",
+      "updated": "2026-06-11"
     }
   }
 }

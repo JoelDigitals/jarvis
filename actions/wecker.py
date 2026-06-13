@@ -139,7 +139,7 @@ def _play_radio(url: str) -> str:
             continue
         try:
             _RADIO_PROCESS = subprocess.Popen(
-                [vlc_path, "--intf", "dummy", "--no-video", "--no-volume-save", url],
+                [vlc_path, "--intf", "dummy", "--no-video", "--no-volume-save", "--volume=50", url],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
             import time
@@ -156,6 +156,10 @@ def _play_radio(url: str) -> str:
         return f"Radio im Browser geöffnet."
     except:
         return f"Radio-Fehler: VLC nicht gefunden und Browser-Fallback fehlgeschlagen."
+
+def is_radio_playing() -> bool:
+    global _RADIO_PROCESS
+    return _RADIO_PROCESS is not None and _RADIO_PROCESS.poll() is None
 
 def _stop_radio():
     global _RADIO_PROCESS

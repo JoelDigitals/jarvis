@@ -448,6 +448,138 @@ class JDSClient:
             lines.append(f"  {name} — {email}")
         return "\n".join(lines)
 
+    def list_incomes(self, date_from: str = "", date_to: str = "") -> str:
+        params = {"limit": 50}
+        if date_from:
+            params["from"] = date_from
+        if date_to:
+            params["to"] = date_to
+        r = self._get("/api/v2/incomes/", params)
+        if not r.get("ok"):
+            return r.get("error", "Fehler")
+        incomes = self._unwrap_list(r["data"])
+        if not incomes:
+            return "Keine Einnahmen gefunden."
+        lines = [f"Einnahmen ({len(incomes)}):"]
+        total = 0
+        for inc in incomes[:20]:
+            title = inc.get("title", "?")
+            amount = inc.get("amount", 0)
+            date_str = _fmt_date(inc.get("date", ""))
+            lines.append(f"  {date_str} — {title}: {amount}€")
+            try: total += float(amount)
+            except: pass
+        lines.append(f"Gesamt: {total:.2f}€")
+        return "\n".join(lines)
+
+    def list_expenses(self, date_from: str = "", date_to: str = "") -> str:
+        params = {"limit": 50}
+        if date_from:
+            params["from"] = date_from
+        if date_to:
+            params["to"] = date_to
+        r = self._get("/api/v2/expenses/", params)
+        if not r.get("ok"):
+            return r.get("error", "Fehler")
+        expenses = self._unwrap_list(r["data"])
+        if not expenses:
+            return "Keine Ausgaben gefunden."
+        lines = [f"Ausgaben ({len(expenses)}):"]
+        total = 0
+        for e in expenses[:20]:
+            title = e.get("title", "?")
+            amount = e.get("amount", 0)
+            date_str = _fmt_date(e.get("date", ""))
+            lines.append(f"  {date_str} — {title}: {amount}€")
+            try: total += float(amount)
+            except: pass
+        lines.append(f"Gesamt: {total:.2f}€")
+        return "\n".join(lines)
+
+    def finance_summary(self) -> dict:
+        now = datetime.now(MESZ)
+        today_str = now.strftime("%Y-%m-%d")
+        yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        result = {}
+
+        # Get incomes today and yesterday
+        for label, dt_str in [("yesterday", yesterday), ("today", today_str)]:
+            r = self._get("/api/v2/incomes/", {"from": dt_str, "to": dt_str, "limit": 100})
+            items = self._unwrap_list(r.get("data", {})) if r.get("ok") else []
+            total = 0.0
+            titles = []
+            for inc in items:
+                try: total += float(inc.get("amount", 0))
+                except: pass
+                t = inc.get("title", "")
+                if t:
+                    titles.append(t)
+            result[label] = {"total": total, "count": len(items), "titles": titles}
+
+        # Get expenses today and yesterday
+        for label, dt_str in [("exp_yesterday", yesterday), ("exp_today", today_str)]:
+            r = self._get("/api/v2/expenses/", {"from": dt_str, "to": dt_str, "limit": 100})
+            items = self._unwrap_list(r.get("data", {})) if r.get("ok") else []
+            total = 0.0
+            titles = []
+            for e in items:
+                try: total += float(e.get("amount", 0))
+                except: pass
+                t = e.get("title", "")
+                if t:
+                    titles.append(t)
+            result[label] = {"total": total, "count": len(items), "titles": titles}
+
+        # Pending invoices (open/unpaid)
+        r2 = self._get("/api/v2/invoices/", {"status": "open", "limit": 50})
+        invoices = self._unwrap_list(r2.get("data", {})) if r2.get("ok") else []
+        pending_total = 0.0
+        for inv in invoices:
+            try: pending_total += float(inv.get("total", 0) or inv.get("amount", 0))
+            except: pass
+        result["pending_invoices"] = {"count": len(invoices), "total": pending_total}
+
+        return result
+
+    def away_briefing(self, since_date: str = "") -> str:
+        if not since_date:
+            return "Kein Start-Datum angegeben."
+        parts = []
+        # Tasks created since
+        r = self._get("/api/v2/tasks/", {"from": since_date, "limit": 50})
+        tasks = self._unwrap_list(r.get("data", {})) if r.get("ok") else []
+        if tasks:
+            parts.append(f"{len(tasks)} neue Aufgaben")
+
+        # Meetings since
+        r = self._get("/api/v2/meetings/", {"from": since_date, "limit": 50})
+        meetings = self._unwrap_list(r.get("data", {})) if r.get("ok") else []
+        if meetings:
+            parts.append(f"{len(meetings)} Meetings")
+
+        # Events since
+        r = self._get("/api/v2/events/", {"from": since_date, "limit": 50})
+        events = self._unwrap_list(r.get("data", {})) if r.get("ok") else []
+        if events:
+            parts.append(f"{len(events)} Events")
+
+        # Invoices created since
+        r = self._get("/api/v2/invoices/", {"from": since_date, "limit": 50})
+        invoices = self._unwrap_list(r.get("data", {})) if r.get("ok") else []
+        if invoices:
+            parts.append(f"{len(invoices)} neue Rechnungen")
+
+        # Notifications since
+        r = self._get("/api/v2/notifications/", {"from": since_date, "limit": 50})
+        notifs = self._unwrap_list(r.get("data", {})) if r.get("ok") else []
+        if notifs:
+            parts.append(f"{len(notifs)} Benachrichtigungen")
+
+        if not parts:
+            return "Keine Aktivitäten seit deiner Abwesenheit."
+
+        return "Seit Ihrer Abwesenheit: " + ", ".join(parts) + "."
+
 
 _client = JDSClient()
 
@@ -543,5 +675,23 @@ def _jds_connect_inner(parameters: dict, player=None) -> str:
 
     if action == "users":
         return _client.list_users()
+
+    if action == "finance":
+        return _client.finance_summary()
+
+    if action == "incomes":
+        return _client.list_incomes(
+            parameters.get("from", ""),
+            parameters.get("to", ""),
+        )
+
+    if action == "expenses":
+        return _client.list_expenses(
+            parameters.get("from", ""),
+            parameters.get("to", ""),
+        )
+
+    if action == "away_briefing":
+        return _client.away_briefing(parameters.get("since", ""))
 
     return f"Unbekannte Aktion: {action}"

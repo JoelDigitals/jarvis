@@ -2,9 +2,7 @@
 
 // ── State ──
 let isMuted = false;
-let isRecording = false;
-let mediaRecorder = null;
-let audioChunks = [];
+let voiceListening = false;
 let chatHistory = [];
 const MAX_LOG = 200;
 
@@ -93,8 +91,10 @@ async function send() {
       addLog('✗ ' + data.error, 'sys');
       setState('LISTENING');
     } else {
-      addLog(data.response || '(keine Antwort)', 'jarvis');
-      chatHistory.push({role:'jarvis', text: data.response});
+      const resp = data.response || '(keine Antwort)';
+      addLog(resp, 'jarvis');
+      chatHistory.push({role:'jarvis', text: resp});
+      speakResponse(resp);
       setState('LISTENING');
     }
   } catch (e) {
@@ -135,35 +135,64 @@ $('#text-input').addEventListener('keydown', e => {
 // ── Send button ──
 $('#send-btn').addEventListener('click', send);
 
-// ── Voice (Browser Mic) ──
-$('#voice-btn')?.addEventListener('click', toggleVoice);
-async function toggleVoice() {
+// ── SpeechRecognition (Browser API) ──
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+let voiceListening = false;
+
+function stopVoice() {
+  voiceListening = false;
   const btn = $('#voice-btn');
-  if (isRecording) {
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-    isRecording = false; btn.classList.remove('recording'); btn.textContent = '🎤';
-    return;
-  }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({audio: true});
-    mediaRecorder = new MediaRecorder(stream, {mimeType: 'audio/webm'});
-    audioChunks = []; isRecording = true;
-    btn.classList.add('recording'); btn.textContent = '⏹';
-    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
-    mediaRecorder.onstop = () => {
-      stream.getTracks().forEach(t => t.stop());
-      btn.classList.remove('recording'); btn.textContent = '🎤'; isRecording = false;
-      if (audioChunks.length === 0) return;
-      const blob = new Blob(audioChunks, {type: 'audio/webm'});
-      if (blob.size < 1000) return;
-      addLog('🎤 Sprachaufnahme', 'user');
-      $('#text-input').value = '[Sprachnachricht]';
+  btn.classList.remove('recording'); btn.textContent = '🎤';
+  if (recognition) { try { recognition.abort(); } catch(_) {} recognition = null; }
+}
+
+function startVoice() {
+  if (!SpeechRecognition) { alert('Spracherkennung wird von diesem Browser nicht unterstützt.'); return; }
+  voiceListening = true;
+  const btn = $('#voice-btn');
+  btn.classList.add('recording'); btn.textContent = '⏹';
+  recognition = new SpeechRecognition();
+  recognition.lang = 'de-DE';
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.onresult = e => {
+    const transcript = e.results[0][0].transcript;
+    if (transcript) {
+      $('#text-input').value = transcript;
       send();
-    };
-    mediaRecorder.start();
-  } catch (e) {
-    alert('Mikrofon-Zugriff verweigert: ' + e.message);
-  }
+    }
+    stopVoice();
+  };
+  recognition.onerror = () => { stopVoice(); };
+  recognition.onend = () => { if (voiceListening) stopVoice(); };
+  recognition.start();
+}
+
+$('#voice-btn')?.addEventListener('click', () => {
+  if (voiceListening) stopVoice();
+  else startVoice();
+});
+
+// ── SpeechSynthesis (vorlesen) ──
+let synth = window.speechSynthesis;
+function speakResponse(text) {
+  if (!synth || !text) return;
+  synth.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'de-DE';
+  utter.rate = 0.95;
+  utter.pitch = 1.0;
+  // deutsche Stimme bevorzugen (mit fallback für asynchrone Stimmen-Ladung)
+  const tryVoice = () => {
+    const voices = synth.getVoices();
+    const de = voices.find(v => v.lang.startsWith('de'));
+    if (de) utter.voice = de;
+    synth.speak(utter);
+  };
+  const voices = synth.getVoices();
+  if (voices.length) tryVoice();
+  else { synth.onvoiceschanged = tryVoice; }
 }
 
 // ── Live-Sync via SSE ──

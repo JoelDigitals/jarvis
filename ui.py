@@ -1936,6 +1936,15 @@ class MainWindow(QMainWindow):
         self._apply_state("LISTENING")
         self._log.append_log(f"SYS: Initialisiert. OS={os_name.upper()}. JARVIS bereit.")
 
+class _RootShim:
+    def __init__(self, app):
+        self._app = app
+    def mainloop(self):
+        self._app.exec()
+    def protocol(self, *_):
+        pass
+
+
 class WebSync:
     """Pusht Logs/State an den Render-Web-Server (Feuer-und-Vergiss)."""
     def __init__(self, url: str = ""):

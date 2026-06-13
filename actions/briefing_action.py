@@ -52,13 +52,13 @@ def _get_jds_tasks() -> dict:
         r = _call_with_timeout(lambda: jds_connect({"action": "tasks", "filter": "me"}), 5)
         if r and "nicht verbunden" not in r.lower() and "nicht konfiguriert" not in r.lower():
             lines = [l.strip() for l in r.split("\n") if l.strip()]
-            task_lines = [l for l in lines if l.startswith("\u25CB") or l.startswith("\u2713")]
+            task_lines = [l for l in lines if l.startswith("  ")]
             count_line = [l for l in lines if "Aufgaben" in l]
             count = 0
             if count_line:
                 try: count = int(count_line[0].split("(")[1].split(")")[0])
                 except: count = len(task_lines)
-            open_tasks = [l for l in task_lines if l.startswith("\u25CB")]
+            open_tasks = [l for l in task_lines if l.lstrip().startswith("○")]
             return {"count": count, "open": open_tasks[:5]}
         return {}
     except Exception as e:
@@ -70,7 +70,7 @@ def _get_jds_events() -> list:
         r = _call_with_timeout(lambda: jds_connect({"action": "events", "days": 7}), 5)
         if r and "nicht verbunden" not in r.lower() and "Keine Events" not in r:
             lines = [l.strip() for l in r.split("\n") if l.strip()]
-            events = [l for l in lines if l.startswith("\U0001F4C5")]
+            events = [l for l in lines if l and not l.startswith("Events")]
             return events[:5]
         return []
     except Exception as e:
@@ -82,7 +82,7 @@ def _get_jds_meetings() -> list:
         r = _call_with_timeout(lambda: jds_connect({"action": "meetings"}), 5)
         if r and "nicht verbunden" not in r.lower() and "Keine Meetings" not in r:
             lines = [l.strip() for l in r.split("\n") if l.strip()]
-            meetings = [l for l in lines if l.startswith("\U0001F4C5")]
+            meetings = [l for l in lines if l and not l.startswith("Meetings")]
             return meetings[:5]
         return []
     except Exception as e:
@@ -106,7 +106,7 @@ def _get_jds_dashboard() -> dict:
 def _get_emails() -> str:
     try:
         from actions.email_manager import email_action
-        r = _call_with_timeout(lambda: email_action({"action": "list", "count": 5, "unread_only": True}), 5)
+        r = _call_with_timeout(lambda: email_action({"action": "list", "count": 5, "unread_only": False}), 5)
         if r and "fehler" not in r.lower()[:20] and "auth" not in r.lower()[:20]:
             return r.strip()
         return ""
@@ -134,6 +134,16 @@ def _get_admin_briefing() -> dict:
                     try: d["orders"] = l.split(":")[1].strip()
                     except: pass
             return d
+        return {}
+    except Exception as e:
+        return {}
+
+def _get_jds_finance() -> dict:
+    try:
+        from actions.jds_client import jds_connect
+        r = _call_with_timeout(lambda: jds_connect({"action": "finance"}), 6)
+        if r and isinstance(r, dict):
+            return r
         return {}
     except Exception as e:
         return {}
@@ -192,14 +202,14 @@ def do_briefing(parameters: dict = None, player=None, session_memory=None) -> st
     jds_parts = []
     if tasks.get("open"):
         for t in tasks["open"][:5]:
-            clean = t.replace("\u25CB", "").strip()
+            clean = t.lstrip("○ ").strip()
             if clean:
                 jds_parts.append(clean)
 
     cal_entries = events + meetings
     if cal_entries:
         for e in cal_entries[:5]:
-            clean = e.replace("\U0001F4C5", "").strip()
+            clean = e.strip()
             if clean:
                 jds_parts.append(clean)
 
@@ -221,6 +231,49 @@ def do_briefing(parameters: dict = None, player=None, session_memory=None) -> st
         subjects = [l for l in lines if l and not l.startswith("E-Mail") and not l.startswith("Keine")]
         if subjects:
             sentences.append(f"E-Mails: {len(subjects)} ungelesen.")
+
+    # ── Finanzen ──
+    fin = _get_jds_finance()
+    if fin:
+        fin_parts = []
+        today = fin.get("today", {})
+        yesterday = fin.get("yesterday", {})
+        exp_today = fin.get("exp_today", {})
+        exp_yesterday = fin.get("exp_yesterday", {})
+        pend = fin.get("pending_invoices", {})
+
+        t_inc = today.get("total", 0)
+        y_inc = yesterday.get("total", 0)
+        t_exp = exp_today.get("total", 0)
+        y_exp = exp_yesterday.get("total", 0)
+
+        if t_inc or y_inc:
+            diff_inc = t_inc - y_inc
+            if diff_inc >= 0:
+                fin_parts.append(f"Einnahmen heute: {t_inc:.2f}€ (plus {diff_inc:.2f}€ zu gestern)")
+            else:
+                fin_parts.append(f"Einnahmen heute: {t_inc:.2f}€ (minus {abs(diff_inc):.2f}€ zu gestern)")
+
+        if t_exp or y_exp:
+            diff_exp = t_exp - y_exp
+            if diff_exp >= 0:
+                fin_parts.append(f"Ausgaben heute: {t_exp:.2f}€ (plus {diff_exp:.2f}€)")
+            else:
+                fin_parts.append(f"Ausgaben heute: {t_exp:.2f}€ (minus {abs(diff_exp):.2f}€)")
+
+        profit = t_inc - t_exp
+        if profit > 0:
+            fin_parts.append(f"Tagesgewinn: {profit:.2f}€")
+        elif profit < 0:
+            fin_parts.append(f"Tagesverlust: {abs(profit):.2f}€")
+
+        p_count = pend.get("count", 0)
+        p_total = pend.get("total", 0)
+        if p_count > 0:
+            fin_parts.append(f"{p_count} offene Rechnungen über {p_total:.2f}€")
+
+        if fin_parts:
+            sentences.append("Finanzen: " + " | ".join(fin_parts) + ".")
 
     # ── Abschluss ──
     sentences.append("Soweit der aktuelle Stand. Was kann ich für Sie tun?")
