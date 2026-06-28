@@ -306,7 +306,7 @@ def _clap_detect_loop(sensitivity: float = 7.0, callback=None):
     SPIKE_RATIO = sensitivity
     RETRIGGER_RATIO = 0.55
     NOISE_FLOOR_ALPHA = 0.995
-    MIN_RMS = 0.04
+    MIN_RMS = 0.06
     QUIET_GATE_MULT = 3.0
     noise_floor = 1e-4
     spike_armed = True

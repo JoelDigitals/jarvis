@@ -46,27 +46,27 @@ _OS = platform.system()  # "Windows" | "Darwin" | "Linux"
 
 
 class C:
-    BG        = "#0d1117"
-    PANEL     = "#161b22"
-    PANEL2    = "#1c2333"
-    BORDER    = "#21262d"
-    BORDER_B  = "#30363d"
-    BORDER_A  = "#58a6ff"
-    PRI       = "#58a6ff"
-    PRI_DIM   = "#1f6feb"
-    PRI_GHO   = "#0d2d6b"
-    ACC       = "#f0883e"
-    ACC2      = "#d29922"
-    GREEN     = "#3fb950"
-    GREEN_D   = "#238636"
-    RED       = "#da3633"
-    MUTED_C   = "#f85149"
-    TEXT      = "#e6edf3"
-    TEXT_DIM  = "#8b949e"
-    TEXT_MED  = "#7d8590"
-    WHITE     = "#f0f6fc"
-    DARK      = "#010409"
-    BAR_BG    = "#21262d"
+    BG        = "#0a0e17"
+    PANEL     = "#111827"
+    PANEL2    = "#1a2332"
+    BORDER    = "#1f2937"
+    BORDER_B  = "#374151"
+    BORDER_A  = "#3b82f6"
+    PRI       = "#60a5fa"
+    PRI_DIM   = "#2563eb"
+    PRI_GHO   = "#1e3a5f"
+    ACC       = "#fb923c"
+    ACC2      = "#fbbf24"
+    GREEN     = "#4ade80"
+    GREEN_D   = "#16a34a"
+    RED       = "#f87171"
+    MUTED_C   = "#ef4444"
+    TEXT      = "#f1f5f9"
+    TEXT_DIM  = "#94a3b8"
+    TEXT_MED  = "#64748b"
+    WHITE     = "#f8fafc"
+    DARK      = "#020617"
+    BAR_BG    = "#1e293b"
 
 
 def qcol(h: str, a: int = 255) -> QColor:
@@ -400,7 +400,65 @@ class HudCanvas(QWidget):
         fw = min(W, H)
         t = time.monotonic()
 
-        # ── glow rings ──
+        # ── Sphere ──
+        sr = fw * 0.30
+        pulse = 1.0
+        if self._speaking:
+            pulse = 1.0 + 0.025 * math.sin(t * 5.0)
+        elif self.state == "LISTENING":
+            pulse = 1.0 + 0.012 * math.sin(t * 2.5)
+
+        # Sphere gradient
+        grad = QRadialGradient(cx - sr * 0.3, cy - sr * 0.3, sr * 1.2)
+        if self._muted:
+            grad.setColorAt(0.0, qcol("#3a3a4a"))
+            grad.setColorAt(1.0, qcol("#0a0a15"))
+        elif self._speaking:
+            grad.setColorAt(0.0, qcol(C.ACC, 220))
+            grad.setColorAt(0.6, qcol("#1a1020"))
+            grad.setColorAt(1.0, qcol("#000000", 200))
+        elif self.state == "LISTENING":
+            grad.setColorAt(0.0, qcol(C.GREEN, 200))
+            grad.setColorAt(0.6, qcol("#001510"))
+            grad.setColorAt(1.0, qcol("#000000", 200))
+        elif self.state in ("THINKING", "PROCESSING"):
+            grad.setColorAt(0.0, qcol(C.ACC2, 200))
+            grad.setColorAt(0.6, qcol("#151020"))
+            grad.setColorAt(1.0, qcol("#000000", 200))
+        else:
+            grad.setColorAt(0.0, qcol(C.PRI, 180))
+            grad.setColorAt(0.6, qcol("#0a0a1a"))
+            grad.setColorAt(1.0, qcol("#000000", 200))
+        p.setBrush(QBrush(grad))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(QPointF(cx, cy), sr * pulse, sr * pulse)
+
+        # Highlight
+        hl_r = sr * 0.4
+        hl = QRadialGradient(cx - sr * 0.2, cy - sr * 0.2, hl_r)
+        hl.setColorAt(0.0, qcol("#ffffff", 60))
+        hl.setColorAt(0.5, qcol("#ffffff", 15))
+        hl.setColorAt(1.0, qcol("#ffffff", 0))
+        p.setBrush(QBrush(hl))
+        p.drawEllipse(QPointF(cx - sr * 0.2, cy - sr * 0.2), hl_r, hl_r)
+
+        # ── Ripple waves (listening) ──
+        if self.state == "LISTENING" and not self._muted:
+            for i in range(2):
+                phase = (t * 1.5 + i * 2.0) % 3.0
+                rr = sr * pulse + phase * sr * 0.4
+                alpha = int(50 * (1.0 - phase / 3.0))
+                p.setPen(QPen(qcol(C.GREEN, alpha), 2))
+                p.drawEllipse(QPointF(cx, cy), rr, rr)
+
+        # ── Pulse ring (speaking) ──
+        if self._speaking:
+            pr = sr * 1.2 + 6 * math.sin(t * 4.0)
+            pa = int(35 + 25 * math.sin(t * 4.0))
+            p.setPen(QPen(qcol(C.ACC, pa), 2))
+            p.drawEllipse(QPointF(cx, cy), pr, pr)
+
+        # ── Glow rings ──
         glow_a, glow_b = self._glow_color()
         ring_r = fw * 0.34
         for i, (col, w) in enumerate([(glow_a, 6), (glow_b, 12)]):
@@ -408,11 +466,11 @@ class HudCanvas(QWidget):
                 p.setPen(QPen(col, w))
                 p.drawEllipse(QPointF(cx, cy), ring_r + i * 4, ring_r + i * 4)
 
-        # ── outer ring ──
+        # ── Outer ring ──
         p.setPen(QPen(qcol(C.BORDER_B, 80), int(fw * 0.01) + 1))
         p.drawEllipse(QPointF(cx, cy), ring_r, ring_r)
 
-        # ── status label ──
+        # ── Status label ──
         blink_on = (int(t * 2) % 12) < 6
         sy = cy + fw * 0.40
         if self._muted:
@@ -433,7 +491,7 @@ class HudCanvas(QWidget):
             txt, col = f"{sym}  {self.state}", qcol(C.PRI)
 
         p.setPen(QPen(col, 1))
-        p.setFont(QFont("Consolas", 13, QFont.Weight.Bold))
+        p.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
         p.drawText(QRectF(0, sy, W, 26), Qt.AlignmentFlag.AlignCenter, txt)
 
 
@@ -530,6 +588,16 @@ class LogWidget(QTextEdit):
     def append_log(self, text: str):
         self._sig.emit(text)
 
+    def append_result(self, title: str, body: str):
+        html = (
+            f'<div style="color: {C.ACC2}; font-weight: bold; '
+            f'border-bottom: 1px solid {C.PRI_GHO}; margin-top: 4px;">'
+            f'▸ {title}</div>'
+            f'<div style="color: {C.TEXT}; padding-left: 8px;">'
+            f'{body}</div>'
+        )
+        self._sig.emit(f"__HTML__{html}|sys")
+
     def _enqueue(self, text: str):
         self._queue.append(text)
         if not self._typing:
@@ -540,8 +608,15 @@ class LogWidget(QTextEdit):
             self._typing = False
             return
         self._typing = True
-        self._text   = self._queue.pop(0)
-        self._pos    = 0
+        raw = self._queue.pop(0)
+        if raw.startswith("__HTML__"):
+            html, tag = raw[8:].rsplit("|", 1)
+            self._insert_html(html)
+            self._typing = False
+            QTimer.singleShot(10, self._next)
+            return
+        self._text = raw
+        self._pos = 0
         tl = self._text.lower()
         if   tl.startswith("du:") or tl.startswith("you:"):  self._tag = "you"
         elif tl.startswith("jarvis:"):                        self._tag = "ai"
@@ -549,6 +624,14 @@ class LogWidget(QTextEdit):
         elif "err" in tl or "fehler" in tl:                     self._tag = "err"
         else:                                                   self._tag = "sys"
         self._tmr.start(25)
+
+    def _insert_html(self, html: str):
+        cur = self.textCursor()
+        cur.movePosition(cur.MoveOperation.End)
+        cur.insertHtml(html)
+        cur.insertText("\n")
+        self.setTextCursor(cur)
+        self.ensureCursorVisible()
 
     def _step(self):
         if self._pos < len(self._text):
@@ -1185,7 +1268,17 @@ class SettingsOverlay(QWidget):
         lay.addWidget(card)
 
         # ════════════════════════════════════
-        # 5  WISSENSSEITEN
+        # 5  AUTOUPDATE
+        # ════════════════════════════════════
+        card = _SectionCard("AUTOUPDATE", "Server-URL + App-Slug")
+        self._au_server = _inp("Server-URL (z.B. https://jarvis-joel.onrender.com)", cfg.get("server_url", ""))
+        self._au_slug = _inp("App-Slug (z.B. jarvis)", cfg.get("autoupdate_app_slug", "jarvis"))
+        card.add_widget(self._au_server)
+        card.add_widget(self._au_slug)
+        lay.addWidget(card)
+
+        # ════════════════════════════════════
+        # 6  WISSENSSEITEN
         # ════════════════════════════════════
         card = _SectionCard("WISSENSSEITEN", "Domains + Logins zum Durchsuchen")
         self._site_layout = QVBoxLayout(); self._site_layout.setSpacing(4)
@@ -1391,6 +1484,10 @@ class SettingsOverlay(QWidget):
         # ───── E-Mail forward ─────
         cfg["email_forward_to"] = self._email_forward_to.text().strip()
 
+        # ───── Autoupdate config ─────
+        cfg["server_url"] = self._au_server.text().strip()
+        cfg["autoupdate_app_slug"] = self._au_slug.text().strip() or "jarvis"
+
         # ───── Discord config ─────
         raw_channels = self._discord_channels.text().strip()
         channels = [c.strip() for c in raw_channels.split() if c.strip()]
@@ -1556,40 +1653,53 @@ class MainWindow(QMainWindow):
 
     def _build_header(self) -> QWidget:
         w = QWidget()
-        w.setFixedHeight(54)
-        w.setStyleSheet(f"background: {C.DARK}; border-bottom: 1px solid {C.BORDER_B};")
+        w.setFixedHeight(56)
+        w.setStyleSheet(f"""
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 {C.PANEL}, stop:1 {C.BG});
+            border-bottom: 1px solid {C.BORDER};
+        """)
         lay = QHBoxLayout(w)
-        lay.setContentsMargins(14, 4, 14, 4)
+        lay.setContentsMargins(16, 4, 16, 4)
 
-        def _badge(txt, color, bold=False, sz=8):
+        def _label(txt, color, sz=8, bold=False, spacing=1):
             l = QLabel(txt)
-            l.setFont(QFont("Consolas", sz, QFont.Weight.Bold if bold else QFont.Weight.Normal))
-            l.setStyleSheet(f"color: {color}; background: transparent; letter-spacing: 1px;")
+            l.setFont(QFont("Segoe UI", sz, QFont.Weight.Bold if bold else QFont.Weight.Normal))
+            l.setStyleSheet(f"color: {color}; background: transparent; letter-spacing: {spacing}px;")
             return l
 
         left = QVBoxLayout(); left.setSpacing(0)
-        left.addWidget(_badge("◆ JOEL DIGITALS", C.PRI, bold=True, sz=9))
-        left.addWidget(_badge("KI-ASSISTENT v2.0", C.TEXT_DIM, sz=7))
+        left.addWidget(_label("◈ JOEL DIGITALS", C.PRI, sz=9, bold=True))
+        left.addWidget(_label("KI-ASSISTENT", C.TEXT_DIM, sz=7))
         lay.addLayout(left)
         lay.addStretch()
 
         mid = QVBoxLayout(); mid.setSpacing(0)
-        title = QLabel("JARVIS")
+        title = QLabel("J A R V I S")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setFont(QFont("Consolas", 22, QFont.Weight.Bold))
-        title.setStyleSheet(f"color: {C.PRI}; background: transparent; letter-spacing: 3px;")
+        title.setFont(QFont("Segoe UI", 20, QFont.Weight.Bold))
+        title.setStyleSheet(f"""
+            color: {C.PRI}; background: transparent;
+            letter-spacing: 6px;
+        """)
         mid.addWidget(title)
-        sub = QLabel("JOEL DIGITALS · KI-ASSISTENT")
+        sub = QLabel("DIGITALER MITARBEITER")
         sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sub.setFont(QFont("Consolas", 7))
-        sub.setStyleSheet(f"color: {C.PRI_DIM}; background: transparent; letter-spacing: 2px;")
+        sub.setFont(QFont("Segoe UI", 7))
+        sub.setStyleSheet(f"color: {C.PRI_DIM}; background: transparent; letter-spacing: 3px;")
         mid.addWidget(sub)
         lay.addLayout(mid)
         lay.addStretch()
 
-        # auto-pilot indicator
+        self._update_lbl = QLabel("")
+        self._update_lbl.setFont(QFont("Segoe UI", 7, QFont.Weight.Bold))
+        self._update_lbl.setStyleSheet(f"color: {C.GREEN}; background: transparent; letter-spacing: 1px; padding-right: 4px;")
+        self._update_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+        self._update_lbl.setFixedWidth(80)
+        lay.addWidget(self._update_lbl)
+
         self._ap_lbl = QLabel("")
-        self._ap_lbl.setFont(QFont("Consolas", 7, QFont.Weight.Bold))
+        self._ap_lbl.setFont(QFont("Segoe UI", 7, QFont.Weight.Bold))
         self._ap_lbl.setStyleSheet(f"color: {C.ACC2}; background: transparent; letter-spacing: 1px; padding-right: 8px;")
         self._ap_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
         self._ap_lbl.setFixedWidth(60)
@@ -1597,12 +1707,12 @@ class MainWindow(QMainWindow):
 
         right_col = QVBoxLayout(); right_col.setSpacing(0)
         self._clock_lbl = QLabel("00:00")
-        self._clock_lbl.setFont(QFont("Consolas", 20, QFont.Weight.Bold))
-        self._clock_lbl.setStyleSheet(f"color: {C.WHITE}; background: transparent; letter-spacing: 2px;")
+        self._clock_lbl.setFont(QFont("Segoe UI", 20, QFont.Weight.Bold))
+        self._clock_lbl.setStyleSheet(f"color: {C.WHITE}; background: transparent; letter-spacing: 3px;")
         self._clock_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
         right_col.addWidget(self._clock_lbl)
         self._date_lbl = QLabel("")
-        self._date_lbl.setFont(QFont("Consolas", 7))
+        self._date_lbl.setFont(QFont("Segoe UI", 7))
         self._date_lbl.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent; letter-spacing: 1px;")
         self._date_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
         right_col.addWidget(self._date_lbl)
@@ -1803,21 +1913,49 @@ class MainWindow(QMainWindow):
 
     def _build_footer(self) -> QWidget:
         w = QWidget()
-        w.setFixedHeight(22)
+        w.setFixedHeight(24)
         w.setStyleSheet(f"background: {C.DARK}; border-top: 1px solid {C.BORDER};")
-        lay = QHBoxLayout(w); lay.setContentsMargins(14, 0, 14, 0)
+        lay = QHBoxLayout(w); lay.setContentsMargins(16, 0, 16, 0)
 
         def _fl(txt, color=C.TEXT_MED):
-            l = QLabel(txt); l.setFont(QFont("Consolas", 8))
+            l = QLabel(txt); l.setFont(QFont("Segoe UI", 8))
             l.setStyleSheet(f"color: {color}; background: transparent;")
             return l
 
         lay.addWidget(_fl("[F4] Stumm  ·  [F11] Vollbild"))
         lay.addStretch()
-        lay.addWidget(_fl("Joel Digitals  ·  JARVIS  ·  v2.0"))
+        self._op_lbl = QLabel("")
+        self._op_lbl.setFont(QFont("Consolas", 8))
+        self._op_lbl.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        lay.addWidget(self._op_lbl)
         lay.addStretch()
-        lay.addWidget(_fl("© JOEL DIGITALS", C.PRI_DIM))
+        self._status_bar = QProgressBar()
+        self._status_bar.setFixedWidth(120)
+        self._status_bar.setFixedHeight(14)
+        self._status_bar.setTextVisible(False)
+        self._status_bar.setRange(0, 100)
+        self._status_bar.setValue(0)
+        self._status_bar.setStyleSheet(f"""
+            QProgressBar {{
+                background: {C.PANEL2}; border: 1px solid {C.BORDER};
+                border-radius: 2px; padding: 0;
+            }}
+            QProgressBar::chunk {{
+                background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+                    stop:0 {C.PRI}, stop:1 {C.ACC});
+                border-radius: 1px;
+            }}
+        """)
+        self._status_bar.setVisible(False)
+        lay.addWidget(self._status_bar)
+        lay.addWidget(_fl("Joel Digitals", C.PRI_DIM))
         return w
+
+    def set_progress(self, value: int, label: str = ""):
+        self._status_bar.setValue(max(0, min(100, value)))
+        self._status_bar.setVisible(value > 0 and value < 100)
+        self._op_lbl.setText(label)
+        QApplication.processEvents()
 
     def _on_file_selected(self, path: str):
         self._current_file = path
@@ -1893,6 +2031,7 @@ class MainWindow(QMainWindow):
         if state == "SPEAKING":
             self.hud.speaking = True
         else:
+            self.hud.speaking = False
             self.hud.set_state(state)
 
     def _check_config(self) -> bool:
@@ -2027,6 +2166,9 @@ class JarvisUI:
         self._win._log_sig.emit(text)
         self._sync.push_log(text)
 
+    def write_result(self, title: str, body: str):
+        self._win._log.append_result(title, body)
+
     def wait_for_api_key(self):
         while not self._win._ready:
             time.sleep(0.1)
@@ -2037,6 +2179,13 @@ class JarvisUI:
     def stop_speaking(self):
         if not self.muted:
             self.set_state("LISTENING")
+
+    def set_progress(self, value: int, label: str = ""):
+        self._win.set_progress(value, label)
+
+    def show_update_available(self, version: str, link: str = ""):
+        self._win._update_lbl.setText(f"⬆ {version}")
+        self._win._update_lbl.setToolTip(f"Update {version} verfügbar\n{link}")
 
     def set_autopilot(self, active: bool):
         self._win._ap_lbl.setText("AUTOPILOT" if active else "")

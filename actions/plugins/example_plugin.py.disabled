@@ -1,0 +1,16 @@
+"""Beispiel-Plugin – zeigt das Format. Datei in '.py' umbenennen, um sie zu aktivieren."""
+
+TOOL = {
+    "name": "muenzwurf",
+    "description": "Wirft eine Münze und gibt Kopf oder Zahl zurück.",
+    "parameters": {
+        "type": "OBJECT",
+        "properties": {},
+        "required": [],
+    },
+}
+
+
+def run(parameters: dict, player=None) -> str:
+    import random
+    return random.choice(["Kopf", "Zahl"])

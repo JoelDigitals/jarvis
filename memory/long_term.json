@@ -1,102 +1,71 @@
 {
-  "identity": {
-    "name": {
-      "value": "Joel",
-      "updated": "2026-06-13"
-    }
-  },
-  "preferences": {
-    "autopilot_status": {
-      "value": "active",
-      "updated": "2026-06-12"
-    },
-    "wants_autopilot_continued": {
-      "value": "true",
-      "updated": "2026-06-12"
-    },
-    "favorite_language": {
-      "value": "German",
-      "updated": "2026-06-13"
-    }
-  },
+  "identity": {},
+  "preferences": {},
   "projects": {
-    "current_task": {
-      "value": "user improving my code",
-      "updated": "2026-06-12"
+    "gruenderwochen_target_audience": {
+      "value": "Young founders, providing discounts and consulting support",
+      "updated": "2026-06-17"
+    },
+    "gruenderwochen_offer_details": {
+      "value": "Free initial consultation included in the campaign",
+      "updated": "2026-06-17"
+    },
+    "gruenderwochen_urgency_hook": {
+      "value": "Drafted hook: Don't miss these offers, save up to 75 percent",
+      "updated": "2026-06-17"
+    },
+    "gruenderwochen_cta_video": {
+      "value": "Video CTA: Check description for contest info, follow for updates in the coming days",
+      "updated": "2026-06-17"
+    },
+    "gruenderwochen_opening_question": {
+      "value": "Proposed opening question for content: Want to start your business now?",
+      "updated": "2026-06-17"
+    },
+    "gruenderwochen_support_statement": {
+      "value": "Campaign focus: Supporting young entrepreneurs specifically during Founding Weeks",
+      "updated": "2026-06-17"
+    },
+    "gruenderwochen_support_focus": {
+      "value": "Reiterated campaign goal: Empowering young entrepreneurs during Founder Weeks",
+      "updated": "2026-06-17"
+    },
+    "gruenderwochen_discount_reminder": {
+      "value": "Emphasize steep discounts of up to 75 percent",
+      "updated": "2026-06-17"
+    },
+    "gruenderwochen_duration_final": {
+      "value": "Confirmed: Two full weeks of discounts. CTA reinforces calendar entry and following channel.",
+      "updated": "2026-06-17"
+    },
+    "web_design_campaign_emails_sent": {
+      "value": "8",
+      "updated": "2026-06-18"
+    },
+    "web_design_campaign_emails_opened": {
+      "value": "0",
+      "updated": "2026-06-18"
     }
   },
   "relationships": {},
   "wishes": {},
   "notes": {
-    "laptop_issue": {
-      "value": "Ace Magic charging port broken, under warranty, needs replacement for work",
-      "updated": "2026-06-11"
-    },
-    "user_returned_confirmed": {
-      "value": "user explicitly confirmed return, autopilot deactivated",
-      "updated": "2026-06-11"
-    },
-    "status_rechnungssuche": {
-      "value": "user confirmed relevant invoice not found yet in desktop subfolders, searching entire PC next",
-      "updated": "2026-06-11"
-    },
-    "last_known_status": {
-      "value": "awaiting feedback on invoice search, user mentioned expert/hans",
-      "updated": "2026-06-11"
-    },
-    "active_status_autopilot": {
-      "value": "true",
-      "updated": "2026-06-11"
-    },
-    "last_check_status_ok": {
-      "value": "true",
-      "updated": "2026-06-11"
-    },
-    "freelancermap_task_complete": {
-      "value": "true",
-      "updated": "2026-06-11"
-    },
     "last_drink_reminder_received": {
-      "value": "2026-06-12 13:56 PM",
-      "updated": "2026-06-12"
+      "value": "2026-06-18 11:00 AM",
+      "updated": "2026-06-18"
     },
-    "current_task_focus": {
-      "value": "abi preparations and exam tomorrow",
-      "updated": "2026-06-12"
+    "content_idea_jtl_management": {
+      "value": "JTL-Management ist mehr als Buchhaltung, es ist ein Verwaltungstool. In Kombination mit JDS Business AI: Rechtsdokumente grob voreinschätzen lassen ohne teuren Anwalt (keine 100% Rechtssicherheit).",
+      "updated": "2026-06-17"
     },
-    "session_status": {
-      "value": "user partially complete with study session",
-      "updated": "2026-06-12"
-    },
-    "user_plan_after_bathroom": {
-      "value": "resume studying, activate autopilot",
-      "updated": "2026-06-12"
-    },
-    "current_activity": {
-      "value": "studying alone, cannot hear speaker",
-      "updated": "2026-06-12"
-    },
-    "last_interaction": {
-      "value": "user returned, check status",
-      "updated": "2026-06-12"
-    },
-    "mood_status": {
-      "value": "sad",
-      "updated": "2026-06-12"
-    },
-    "son_mention_portuguese_insult": {
-      "value": "mentioned son, then used severe insult in Portuguese",
-      "updated": "2026-06-12"
+    "content_idea_jtl_features": {
+      "value": "Additional features: meeting room management, digital time tracking, DATEV interface.",
+      "updated": "2026-06-17"
     }
   },
   "credentials": {},
   "contacts": {},
   "hobbies": {},
   "interests": {},
-  "current_status": {
-    "autopilot_activated_by_user": {
-      "value": "user confirms autopilot activation to focus on studying",
-      "updated": "2026-06-11"
-    }
-  }
+  "current_status": {}
 }

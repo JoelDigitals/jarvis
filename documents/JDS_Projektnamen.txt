@@ -1,0 +1,15 @@
+Namensvorschläge für JDS Search & Unterprojekte:
+
+Hauptprojekt: JDS Search
+
+KI-Module/Unterseiten:
+- JDK (Joel Digital Knowledge)
+- JDS Brain
+- JDS Insight
+- JDS Cognitive Services
+
+Sonstiges:
+- JDS Mail
+- JDS Direct
+- JDS Nexus
+- JDS Hub

@@ -106,10 +106,24 @@ def _get_jds_dashboard() -> dict:
 def _get_emails() -> str:
     try:
         from actions.email_manager import email_action
-        r = _call_with_timeout(lambda: email_action({"action": "list", "count": 5, "unread_only": False}), 5)
-        if r and "fehler" not in r.lower()[:20] and "auth" not in r.lower()[:20]:
-            return r.strip()
-        return ""
+        accounts = _call_with_timeout(lambda: email_action({"action": "accounts"}), 5)
+        if not accounts or "fehler" in accounts.lower()[:20]:
+            return ""
+        total = []
+        for line in accounts.split("\n"):
+            parts = line.strip().split("—")
+            if len(parts) >= 2:
+                name = parts[0].split(".")[-1].strip().rstrip(":")
+                if name:
+                    r = _call_with_timeout(lambda: email_action({"action": "list", "account": name, "unread_only": True, "count": 3}), 5)
+                    if r and "Keine" not in r:
+                        for l in r.split("\n"):
+                            l = l.strip()
+                            if l and not l.startswith("E-Mail") and not l.startswith("Keine"):
+                                total.append(f"[{name}] {l}")
+        if total:
+            return "\n".join(total[:10])
+        return "Keine ungelesenen E-Mails."
     except Exception as e:
         return ""
 
@@ -224,13 +238,13 @@ def do_briefing(parameters: dict = None, player=None, session_memory=None) -> st
     if jds_parts:
         sentences.append("JDS: " + " | ".join(jds_parts) + ".")
 
-    # ── E-Mails ──
+    # ── E-Mails (nur wenn wirklich alle Konten geprüft wurden) ──
     emails = _get_emails()
     if emails and "Keine" not in emails:
         lines = [l.strip() for l in emails.split("\n") if l.strip()]
         subjects = [l for l in lines if l and not l.startswith("E-Mail") and not l.startswith("Keine")]
         if subjects:
-            sentences.append(f"E-Mails: {len(subjects)} ungelesen.")
+            sentences.append(f"E-Mails: {len(subjects)} ungelesen über alle Konten.")
 
     # ── Finanzen ──
     fin = _get_jds_finance()
@@ -278,6 +292,6 @@ def do_briefing(parameters: dict = None, player=None, session_memory=None) -> st
     # ── Abschluss ──
     sentences.append("Soweit der aktuelle Stand. Was kann ich für Sie tun?")
 
-    result = " ".join(sentences)
+    result = "BRIEFING-TEXT ZUM VORLESEN: " + " ".join(sentences) + " --- ENDE BRIEFING ---"
     print(f"[BRIEFING] Ergebnis: {str(result)[:200]}")
     return result

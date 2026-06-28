@@ -7,6 +7,10 @@
     "status_rechnungssuche": {
       "value": "completed by user",
       "updated": "2026-06-12 22:54"
+    },
+    "bluetooth_preference": {
+      "value": "wants phone paired for music, but prioritize and switch to MacBook immediately when MacBook is active",
+      "updated": "2026-06-16 21:36"
     }
   },
   "company": {
@@ -19,6 +23,22 @@
     "marcel_junk_info": {
       "value": "Local council in Dörsdorf, local head (Ortsvorsteher) of Dörsdorf, contact for doersdorf.de website",
       "updated": "2026-06-09 22:41"
+    }
+  },
+  "processes": {
+    "marketing_strategy_jds_management_2weeks": {
+      "value": "JDS Management main app discounted for full 2 weeks. Other sub-apps and different apps rotate discounts weekly. Goal: consistent discounts across the fortnight, no product double-discounted with different rates, rotating offers. Launching 3 systems (including JDS Browser, JDS Search) in week 1. Platform priority: TikTok, Instagram, YouTube, LinkedIn.",
+      "updated": "2026-06-15 17:50"
+    }
+  },
+  "products": {
+    "surf_details": {
+      "value": "Backup service, digital delivery via code download",
+      "updated": "2026-06-17 23:16"
+    },
+    "secure_details": {
+      "value": "Antivirus program, physical delivery via USB stick by post",
+      "updated": "2026-06-17 23:16"
     }
   }
 }

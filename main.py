@@ -1,5 +1,6 @@
 import asyncio
 import gc
+import math
 import threading
 import json
 import os
@@ -8,6 +9,8 @@ import time
 import traceback
 from collections import deque
 from pathlib import Path
+
+import numpy as np
 
 import sounddevice as sd
 from google import genai
@@ -18,6 +21,7 @@ from memory.memory_manager import (
     should_extract_memory, extract_memory
 )
 
+from actions.autoupdater import check_for_update, _read_current_version
 from actions.file_processor import file_processor
 from actions.flight_finder     import flight_finder
 from actions.open_app          import open_app
@@ -856,8 +860,179 @@ TOOL_DECLARATIONS = [
             "required": ["url"]
         }
     },
+    {
+        "name": "social_manager",
+        "description": (
+            "Social-Media-Content-Manager: Erstellt, listet und veröffentlicht "
+            "Social-Media-Posts (Instagram, TikTok, Twitter/X, LinkedIn, YouTube, Facebook). "
+            "Aktionen: create (Post-Entwurf erstellen), list (Entwürfe anzeigen), "
+            "publish (veröffentlichen), analytics (Statistiken), platforms (verfügbare Plattformen)."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {
+                    "type": "STRING",
+                    "description": "create | list | publish | analytics | platforms"
+                },
+                "platform": {
+                    "type": "STRING",
+                    "description": "instagram | tiktok | twitter | linkedin | youtube | facebook"
+                },
+                "content": {
+                    "type": "STRING",
+                    "description": "Text des Posts (bei action=create)"
+                },
+                "media": {
+                    "type": "ARRAY",
+                    "items": {"type": "STRING"},
+                    "description": "Liste von Dateipfaden für Bilder/Videos"
+                },
+                "schedule": {
+                    "type": "STRING",
+                    "description": "Geplanter Zeitpunkt (optional, ISO-Format)"
+                },
+                "draft_path": {
+                    "type": "STRING",
+                    "description": "Pfad zum Entwurf (bei action=publish)"
+                }
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "video_creator",
+        "description": (
+            "Erstellt und bearbeitet Videos mit FFmpeg. "
+            "Aktionen: create (Video aus Bildern + Audio erstellen), "
+            "trim (Video schneiden), concat (Videos zusammenfügen), "
+            "text (Text-Overlay hinzufügen), info (FFmpeg-Status prüfen)."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {
+                    "type": "STRING",
+                    "description": "create | trim | concat | text | info"
+                },
+                "images": {
+                    "type": "ARRAY",
+                    "items": {"type": "STRING"},
+                    "description": "Bilddateien für Video-Erstellung"
+                },
+                "audio": {
+                    "type": "STRING",
+                    "description": "Audiodatei für Video-Hintergrund (optional)"
+                },
+                "duration": {
+                    "type": "NUMBER",
+                    "description": "Sekunden pro Bild (default: 3.0)"
+                },
+                "input": {
+                    "type": "STRING",
+                    "description": "Eingabedatei (bei trim/text)"
+                },
+                "start": {
+                    "type": "STRING",
+                    "description": "Startzeit (HH:MM:SS) für trim"
+                },
+                "end": {
+                    "type": "STRING",
+                    "description": "Endzeit (HH:MM:SS) für trim"
+                },
+                "text": {
+                    "type": "STRING",
+                    "description": "Text für Overlay (bei action=text)"
+                },
+                "paths": {
+                    "type": "ARRAY",
+                    "items": {"type": "STRING"},
+                    "description": "Videodateien für concat"
+                }
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "claude_bridge",
+        "description": (
+            "Claude Code (Anthropic) – KI-Programmier-Assistent. "
+            "Aktionen: chat (Unterhaltung/Abfrage), write (Code schreiben + speichern), "
+            "explain (Code erklären), debug (Fehler suchen + beheben), "
+            "refactor (Code optimieren/refaktorisieren), review (Code-Review), "
+            "project_task (an einem BESTEHENDEN Projekt weiterprogrammieren: liest relevante Dateien, "
+            "setzt die Aufgabe um, schreibt Änderungen direkt ins Projekt, testet optional und behebt Fehler iterativ — "
+            "nutze dies für 'mach an meiner App weiter', 'behebe den Fehler in Projekt X', neue Features in bestehendem Code). "
+            "Erfordert anthropic_api_key in config/api_keys.json."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {
+                    "type": "STRING",
+                    "description": "chat | write | explain | debug | refactor | review"
+                },
+                "prompt": {
+                    "type": "STRING",
+                    "description": "Aufgabenbeschreibung oder Frage"
+                },
+                "code": {
+                    "type": "STRING",
+                    "description": "Quellcode (bei explain/debug/refactor)"
+                },
+                "language": {
+                    "type": "STRING",
+                    "description": "Programmiersprache (default: python)"
+                },
+                "output_path": {
+                    "type": "STRING",
+                    "description": "Dateipfad zum Speichern (bei action=write)"
+                },
+                "file_path": {
+                    "type": "STRING",
+                    "description": "Pfad zu einer existierenden Datei (bei review)"
+                },
+                "system": {
+                    "type": "STRING",
+                    "description": "System-Prompt für Claude (optional)"
+                },
+                "project_path": {
+                    "type": "STRING",
+                    "description": "Pfad zum Projektordner (bei action=project_task)"
+                },
+                "run_command": {
+                    "type": "STRING",
+                    "description": "Optionaler Befehl, um die Änderung zu testen (bei action=project_task), z.B. 'python main.py --check'"
+                }
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "project_watch",
+        "description": (
+            "Überwacht Projektordner selbstständig im Hintergrund auf Fehler (Syntaxfehler, Tracebacks in Logs) "
+            "und meldet neue Probleme proaktiv, ohne dass der Nutzer fragen muss. "
+            "Aktionen: add (Projekt hinzufügen, braucht path), remove (entfernen), list (auflisten), "
+            "scan_now (sofort prüfen)."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {"type": "STRING", "description": "add | remove | list | scan_now"},
+                "path": {"type": "STRING", "description": "Ordnerpfad des Projekts (bei add/remove)"},
+                "name": {"type": "STRING", "description": "Anzeigename des Projekts (optional)"},
+            },
+            "required": ["action"]
+        }
+    },
 ]
 
+try:
+    from actions.plugin_loader import get_plugin_tool_declarations
+    TOOL_DECLARATIONS += get_plugin_tool_declarations()
+except Exception as _e:
+    print(f"[PLUGIN] ⚠️ Plugins konnten nicht geladen werden: {_e}")
 
 class JarvisLive:
 
@@ -882,8 +1057,14 @@ class JarvisLive:
         self._quiet_hours_end   = 7   # 07:00
         self._night_voice_until = 0.0  # Timestamp bis wann Audio nachts erlaubt ist (0 = blockiert)
         self._night_logged = False      # Ob Nachtmodus-Log bereits geschrieben wurde
+        self._session_active = False       # Ob aktuelle Session noch lebt
         self._user_has_spoken = False    # Ob Nutzer in aktueller Session schon Input gesendet hat
         self._suppress_response = False
+        # ── Ansprache-Gate: verhindert Reagieren auf nicht an JARVIS gerichtete Sprache ──
+        self._WAKE_WORDS = ("jarvis", "javis")
+        self._CONVO_WINDOW = 25.0  # Sekunden, in denen Folgesätze ohne erneutes "Jarvis" zählen
+        self._turn_addressed = False   # Wake-Word in aktuellem Turn erkannt
+        self._addressed_until = 0.0    # Aktives Gesprächsfenster läuft bis hier
         self._initialized = False        # Ob Setup (Timer etc.) bereits einmal ausgeführt wurde
         self.ui.on_mic_unmute = self._flush_wake_buffer
 
@@ -995,6 +1176,10 @@ class JarvisLive:
             if q in self._response_queues:
                 self._response_queues.remove(q)
 
+    def _is_addressed(self) -> bool:
+        """True, wenn im aktuellen Turn das Wake-Word fiel oder wir uns in einem aktiven Gesprächsfenster befinden."""
+        return self._turn_addressed or time.time() < self._addressed_until
+
     def _is_quiet_hours(self) -> bool:
         from datetime import datetime
         h = datetime.now().hour
@@ -1009,9 +1194,9 @@ class JarvisLive:
             if value:
                 self._safe_set_state("SPEAKING")
                 self._start_wake_listener()
-            elif not self.ui.muted:
+            else:
                 self._stop_wake_listener()
-                self._mic_hold_until = time.time() + 1.0
+                self._mic_hold_until = time.time() + 3.0
                 self._safe_set_state("LISTENING")
         except RuntimeError:
             pass
@@ -1019,6 +1204,9 @@ class JarvisLive:
     def speak(self, text: str):
         if not self._loop or not self.session:
             return
+        # Proaktive Ansage von JARVIS selbst — umgeht das Ansprache-Gate (kein Wake-Word nötig).
+        self._turn_addressed = True
+        self._addressed_until = time.time() + self._CONVO_WINDOW
         try:
             asyncio.run_coroutine_threadsafe(
                 self.session.send_client_content(
@@ -1273,9 +1461,14 @@ class JarvisLive:
                 result = r or "Done."
 
             elif name == "do_briefing":
-                from actions.briefing_action import do_briefing
-                r = await loop.run_in_executor(None, lambda: do_briefing(parameters=args, player=self.ui))
-                result = (r or "").strip()
+                now = time.time()
+                if now - getattr(self, '_last_briefing', 0) < 15.0:
+                    result = "Bereits durchgeführt. Lies den vorherigen Text vor."
+                else:
+                    self._last_briefing = now
+                    from actions.briefing_action import do_briefing
+                    r = await loop.run_in_executor(None, lambda: do_briefing(parameters=args, player=self.ui))
+                    result = (r or "").strip()
 
             elif name == "morning_routine":
                 from actions.briefing_action import do_briefing
@@ -1332,8 +1525,26 @@ class JarvisLive:
                     os._exit(0)
 
                 threading.Thread(target=_shutdown, daemon=True).start()
+            elif name == "social_manager":
+                from actions.social_manager import social_action
+                r = await loop.run_in_executor(None, lambda: social_action(parameters=args, player=self.ui))
+                result = r or "Social-Manager ausgeführt."
+            elif name == "video_creator":
+                from actions.video_creator import video_action
+                r = await loop.run_in_executor(None, lambda: video_action(parameters=args, player=self.ui))
+                result = r or "Video-Aktion ausgeführt."
+            elif name == "claude_bridge":
+                from actions.claude_bridge import claude_action
+                r = await loop.run_in_executor(None, lambda: claude_action(parameters=args, player=self.ui))
+                result = r or "Claude Code ausgeführt."
+            elif name == "project_watch":
+                from actions.project_watcher import project_watch_action
+                r = await loop.run_in_executor(None, lambda: project_watch_action(parameters=args, player=self.ui))
+                result = r or "Projekt-Überwachung ausgeführt."
             else:
-                result = f"Unknown tool: {name}"
+                from actions.plugin_loader import run_plugin
+                r = await loop.run_in_executor(None, lambda: run_plugin(name, args, player=self.ui))
+                result = r if r is not None else f"Unknown tool: {name}"
 
         except Exception as e:
             result = f"Tool '{name}' failed: {e}"
@@ -1353,9 +1564,11 @@ class JarvisLive:
         )
 
     async def _send_realtime(self):
-        while True:
+        while self._session_active:
             try:
-                msg = await self.out_queue.get()
+                msg = await asyncio.wait_for(self.out_queue.get(), timeout=3.0)
+            except asyncio.TimeoutError:
+                continue
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -1366,8 +1579,9 @@ class JarvisLive:
                     audio=types.Blob(data=msg["data"], mime_type=msg["mime_type"])
                 )
             except Exception as e:
-                print(f"[JARVIS] ⚠️ send_realtime failed: {e}")
-                await asyncio.sleep(0.1)
+                print(f"[JARVIS] ⚠️ send_realtime fehlgeschlagen – Session beendet: {e}")
+                self._session_active = False
+                return
 
     async def _listen_audio(self):
         print("[JARVIS] 🎤 Mic started")
@@ -1398,7 +1612,9 @@ class JarvisLive:
                 return
             if self._is_quiet_hours():
                 self._night_voice_until = time.time() + 20.0
-            self._user_has_spoken = True
+            rms = float(np.sqrt(np.mean(indata.astype(np.float64)**2)))
+            if rms > 0.025:
+                self._user_has_spoken = True
             try:
                 loop.call_soon_threadsafe(_safe_put, {"data": data, "mime_type": f"audio/pcm;rate={SEND_SAMPLE_RATE}"})
             except RuntimeError:
@@ -1413,7 +1629,8 @@ class JarvisLive:
                 callback=callback,
             ):
                 print("[JARVIS] 🎤 Mic stream open")
-                await asyncio.Event().wait()
+                while self._session_active:
+                    await asyncio.sleep(1)
         except Exception as e:
             print(f"[JARVIS] ❌ Mic: {e}")
             raise
@@ -1427,7 +1644,7 @@ class JarvisLive:
                 async for response in self.session.receive():
 
                     if response.data and isinstance(response.data, bytes) and len(response.data) > 0:
-                        if self._user_has_spoken:
+                        if self._user_has_spoken and self._is_addressed():
                             self.set_speaking(True)
                             self.audio_buf.put(response.data)
 
@@ -1442,6 +1659,8 @@ class JarvisLive:
                         if sc.input_transcription and sc.input_transcription.text:
                             txt = sc.input_transcription.text.strip()
                             if txt:
+                                if not self._turn_addressed and any(w in txt.lower() for w in self._WAKE_WORDS):
+                                    self._turn_addressed = True
                                 if self._is_speaking and ("jarvis" in txt.lower() or "javis" in txt.lower()):
                                     print("[JARVIS] ⚡ Wake word per Gemini erkannt")
                                     self.audio_buf.interrupt()
@@ -1449,20 +1668,23 @@ class JarvisLive:
                                 in_buf.append(txt)
 
                         if sc.turn_complete:
+                            addressed = self._is_addressed()
                             # Warte bis letzte Audio aus dem Puffer abgespielt + Speaker-Latenz
                             while self.audio_buf.qsize() > 0:
                                 await asyncio.sleep(0.05)
-                            await asyncio.sleep(0.15)
+                            await asyncio.sleep(0.5)
                             self.set_speaking(False)
 
                             full_in = " ".join(in_buf).strip()
-                            if full_in:
+                            if full_in and addressed:
                                 self.ui.write_log(f"Du: {full_in}")
                                 self._history.append({"role": "user", "text": full_in})
+                            elif full_in:
+                                print(f"[JARVIS] 🚫 Nicht angesprochen, ignoriert: {full_in[:60]}")
                             in_buf = []
 
                             full_out = " ".join(out_buf).strip()
-                            if full_out:
+                            if full_out and addressed:
                                 self.ui.write_log(f"Jarvis: {full_out}")
                                 self._forward_response(full_out)
                                 self._history.append({"role": "model", "text": full_out})
@@ -1473,12 +1695,29 @@ class JarvisLive:
 
                             out_buf = []
 
-                            if full_in and len(full_in) > 5:
+                            if full_in and len(full_in) > 5 and addressed:
                                 _MEMORY_POOL.submit(_update_memory_async, full_in, full_out)
+
+                            if addressed:
+                                self._addressed_until = time.time() + self._CONVO_WINDOW
+                            self._turn_addressed = False
 
                     if response.tool_call:
                         fn_responses = []
+                        seen = set()
+                        addressed = self._is_addressed()
                         for fc in response.tool_call.function_calls:
+                            key = (fc.name, json.dumps(dict(fc.args or {}), sort_keys=True))
+                            if key in seen:
+                                continue
+                            seen.add(key)
+                            if not addressed:
+                                print(f"[JARVIS] 🚫 Tool {fc.name} ignoriert (nicht angesprochen)")
+                                fn_responses.append(types.FunctionResponse(
+                                    id=fc.id, name=fc.name,
+                                    response={"result": "ignored: user did not address Jarvis"}
+                                ))
+                                continue
                             print(f"[JARVIS] 📞 {fc.name}")
                             try:
                                 fr = await self._execute_tool(fc)
@@ -1503,7 +1742,9 @@ class JarvisLive:
         except Exception as e:
             print(f"[JARVIS] ❌ Recv: {e}")
             traceback.print_exc()
-            raise
+            self.set_speaking(False)
+            self._session_active = False
+            return
 
     async def _play_audio(self):
         print("[JARVIS] 🔊 Play started")
@@ -1519,7 +1760,11 @@ class JarvisLive:
         try:
             while True:
                 try:
-                    chunk = await self.audio_buf.get()
+                    chunk = await asyncio.wait_for(self.audio_buf.get(), timeout=2.0)
+                except asyncio.TimeoutError:
+                    if not self._session_active:
+                        return
+                    continue
                 except asyncio.CancelledError:
                     if self.audio_buf._interrupted:
                         # Wake-Word-Unterbrechung — Stream neu aufbauen
@@ -1548,14 +1793,56 @@ class JarvisLive:
                         continue
                     elif self._night_logged:
                         self._night_logged = False
+                    # Deadline während laufender Antwort verlängern
+                    self._night_voice_until = time.time() + 5.0
                 await asyncio.to_thread(stream.write, chunk)
+                if not self._session_active:
+                    return
         except Exception as e:
             print(f"[JARVIS] ❌ Play: {e}")
-            raise
+            return
         finally:
             self.set_speaking(False)
             stream.stop()
             stream.close()
+
+    def _check_autoupdate(self):
+        try:
+            from config.settings import load as load_cfg
+            cfg = load_cfg()
+            server_url = os.environ.get("SERVER_URL") or cfg.get("server_url", "")
+            if not server_url:
+                server_url = "https://jarvis-joel.onrender.com"
+            app_slug = cfg.get("autoupdate_app_slug", "jarvis")
+            result = check_for_update(server_url, app_slug, timeout=3)
+            if result.get("error"):
+                print(f"[AUTOUPDATE] ⚠️ {result['error']}")
+                return
+            if result.get("update_available"):
+                ver = result["latest_version"]
+                link = result["download_link"]
+                notes = result.get("release_notes", "")
+                self.ui.write_log(f"SYS: Update {ver} gefunden, installiere automatisch...")
+                self.ui.write_result(
+                    "UPDATE WIRD INSTALLIERT",
+                    f'Version <b>{ver}</b> wird automatisch installiert.'
+                    + (f'<br><small>{notes[:200]}</small>' if notes else '')
+                )
+                from actions.autoupdater import apply_update
+                status = apply_update(link, ver)
+                self.ui.write_log(f"SYS: {status}")
+                if "wird installiert" in status:
+                    self.ui.show_update_available(ver, link)
+                    os._exit(0)
+                else:
+                    # Quellcode-Betrieb: kein automatischer Ersatz möglich, nur anzeigen
+                    self.ui.show_update_available(ver, link)
+            else:
+                print(f"[AUTOUPDATE] ✓ Kein Update nötig (aktuell: {_read_current_version()})")
+        except Exception as e:
+            print(f"[AUTOUPDATE] ⚠️ {e}")
+        finally:
+            threading.Timer(4 * 3600.0, self._check_autoupdate).start()
 
     def _setup_hourly_reminder(self):
         try:
@@ -1755,6 +2042,39 @@ class JarvisLive:
         except Exception as e:
             print(f"[EMAIL-SCAN] ⚠️ {e}")
 
+    def _setup_project_watcher(self):
+        """Scannt überwachte Projekte alle 30 Minuten selbstständig auf Fehler und meldet Neues proaktiv."""
+        try:
+            from actions.project_watcher import _load as _load_watched, scan_project
+            self._watch_known_issues = {}  # path -> letzte Issue-Liste, um Spam zu vermeiden
+            self._project_watch_gen = getattr(self, "_project_watch_gen", 0) + 1
+            _my_gen = self._project_watch_gen
+
+            def _scan():
+                if self._project_watch_gen != _my_gen:
+                    return
+                try:
+                    data = _load_watched()
+                    for p in data.get("projects", []):
+                        issues = scan_project(p["path"])
+                        prev = self._watch_known_issues.get(p["path"], [])
+                        new_issues = [i for i in issues if i not in prev]
+                        self._watch_known_issues[p["path"]] = issues
+                        if new_issues and not self.ui.muted and not self._is_quiet_hours():
+                            text = f"Sir, ich habe ein Problem in {p['name']} gefunden: {new_issues[0][:200]}"
+                            self.speak(text)
+                            self.ui.write_log(f"SYS: ⚠️ Watcher — {p['name']}: {new_issues[0][:120]}")
+                            self._log_autopilot(f"Projekt-Watcher: {p['name']} — {new_issues[0][:80]}")
+                except Exception as e:
+                    print(f"[PROJECT-WATCH] ⚠️ {e}")
+                threading.Timer(1800.0, _scan).start()
+
+            threading.Timer(1800.0, _scan).start()
+            print("[PROJECT-WATCH] ✅ Scan alle 30 Minuten aktiv")
+            self.ui.write_log("SYS: Projekt-Überwachung alle 30 Minuten aktiviert.")
+        except Exception as e:
+            print(f"[PROJECT-WATCH] ⚠️ Setup fehlgeschlagen: {e}")
+
     def _set_autopilot(self, active: bool, parameters: dict = None):
         self._autopilot_active = active
         self.ui.set_autopilot(active)
@@ -1864,37 +2184,12 @@ class JarvisLive:
         tg = asyncio.create_task(self._discord.start())
         print("[DISCORD] 🤖 Bot gestartet (sofern Token gesetzt)")
 
-    def _setup_clap_detection(self):
-        try:
-            from actions.wake_manager import start_clap_detection, stop_clap_detection
-            _last_clap = 0.0
-            def _on_clap():
-                nonlocal _last_clap
-                now = time.time()
-                if now - _last_clap < 10.0:
-                    return
-                _last_clap = now
-                if self.ui.muted:
-                    print("[WAKE] 🔇 Mic stumm — Clap ignoriert")
-                    return
-                if self._loop and self.session and not self._is_speaking:
-                    self._user_has_spoken = True
-                    txt = "Aufwachen!"
-                    asyncio.run_coroutine_threadsafe(
-                        self.session.send_client_content(
-                            turns=types.ContentDict(role="user", parts=[types.PartDict(text=txt)]),
-                            turn_complete=True
-                        ),
-                        self._loop
-                    )
-                    print("[WAKE] 👏 Clap → Gemini gesendet")
-            start_clap_detection(callback=_on_clap)
-        except Exception as e:
-            print(f"[WAKE] ⚠️ Clap-Setup: {e}")
-
     async def _gc_loop(self):
-        while True:
-            await asyncio.sleep(120)
+        while self._session_active:
+            for _ in range(24):
+                await asyncio.sleep(5)
+                if not self._session_active:
+                    return
             gc.collect()
             print(f"[GC] Collect — {gc.get_stats()[0].get('collected',0)} objects freed")
 
@@ -1904,8 +2199,33 @@ class JarvisLive:
             http_options={"api_version": "v1beta"}
         )
 
+        # Nur initial ausführen (kein Crash-Loop durch Setup)
+        if not self._initialized:
+            try:
+                self._setup_hourly_reminder()
+                self._setup_daily_report()
+                self._setup_email_scanner()
+                self._setup_project_watcher()
+                self._start_discord()
+                from actions.wecker import schedule_all
+                schedule_all()
+                self._check_autoupdate()
+            except Exception as ex:
+                print(f"[JARVIS] ⚠️ Setup-Fehler: {ex}")
+            self._initialized = True
+
         while True:
             try:
+                # JDS und Email vor Session (Fehler crashen nicht die Session)
+                try:
+                    await asyncio.to_thread(self._connect_jds)
+                except Exception as ex:
+                    print(f"[JARVIS] ⚠️ JDS nicht erreichbar: {ex}")
+                try:
+                    await asyncio.to_thread(self._auto_setup_email)
+                except Exception:
+                    pass
+
                 print("[JARVIS] 🔌 Connecting...")
                 self._safe_set_state("THINKING")
                 config = self._build_config()
@@ -1920,22 +2240,11 @@ class JarvisLive:
                     self.out_queue      = asyncio.Queue(maxsize=10)
                     self._user_has_spoken = False
                     self._wake_buffer.clear()
+                    self._session_active = True
 
                     print("[JARVIS] ✅ Connected.")
                     self._safe_set_state("LISTENING")
                     self.ui.write_log("SYS: JARVIS bereit.")
-
-                    if not self._initialized:
-                        self._setup_hourly_reminder()
-                        self._setup_daily_report()
-                        self._setup_email_scanner()
-                        self._start_discord()
-                        self._setup_clap_detection()
-                        from actions.wecker import schedule_all
-                        schedule_all()
-                        self._initialized = True
-                    await asyncio.to_thread(self._connect_jds)
-                    await asyncio.to_thread(self._auto_setup_email)
 
                     tg.create_task(self._send_realtime())
                     tg.create_task(self._listen_audio())
@@ -1950,6 +2259,13 @@ class JarvisLive:
             try:
                 self.set_speaking(False)
                 self._safe_set_state("THINKING")
+            except Exception:
+                pass
+            # UI-State hart zurücksetzen (auch wenn Signal nicht durchkam)
+            try:
+                self.ui.hud._speaking = False
+                self.ui.hud.state = "LISTENING"
+                self.ui.hud.update()
             except Exception:
                 pass
             print("[JARVIS] 🔄 Reconnecting in 10s...")

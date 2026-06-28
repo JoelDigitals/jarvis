@@ -24,3 +24,5 @@ send2trash
 pywinauto
 pyaudio
 discord.py
+PyQt6
+SpeechRecognition

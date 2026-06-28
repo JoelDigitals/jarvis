@@ -4,6 +4,7 @@ from pathlib import Path
 from collections import deque
 from flask import Flask, request, jsonify, render_template, send_from_directory, Response, stream_with_context
 from flask_cors import CORS
+from server.autoupdate_api import autoupdate_bp
 
 BASE = Path(__file__).resolve().parent.parent
 STATIC = BASE / "server" / "static"
@@ -11,6 +12,7 @@ TEMPLATES = BASE / "server" / "templates"
 
 app = Flask(__name__, template_folder=str(TEMPLATES), static_folder=str(STATIC))
 CORS(app)
+app.register_blueprint(autoupdate_bp)
 
 CONFIG_DIR = BASE / "config"
 
@@ -39,7 +41,8 @@ def _load_settings():
         p = CONFIG_DIR / "settings.json"
         if p.exists():
             return json.loads(p.read_text(encoding="utf-8"))
-    except: pass
+    except Exception as e:
+        print(f"[Server] Konnte settings.json nicht laden: {e}")
     return {}
 
 def _save_settings(data):
@@ -54,6 +57,10 @@ def _save_settings(data):
 @app.route("/")
 def index():
     return render_template("index.html")
+
+@app.route("/health")
+def health():
+    return jsonify({"status": "ok"})
 
 @app.route("/api/chat", methods=["POST"])
 def chat():
@@ -159,7 +166,8 @@ def api_key():
                         if val:
                             key = val
                             break
-            except: pass
+            except Exception as e:
+                print(f"[Server] Konnte api_keys.json nicht laden: {e}")
         return jsonify({"key": key, "has_key": bool(key)})
     data = request.get_json(force=True)
     key = (data.get("key") or "").strip()
@@ -234,8 +242,18 @@ def _get_api_key_any():
     import server.handler as h
     return bool(h._get_api_key())
 
+def _warmup():
+    """Lädt server.handler (inkl. main.py-Tools) schon beim Start, nicht erst beim ersten Request."""
+    try:
+        t0 = time.time()
+        import server.handler  # noqa: F401
+        print(f"[Server] Warmup abgeschlossen ({time.time() - t0:.1f}s)")
+    except Exception as e:
+        print(f"[Server] Warmup fehlgeschlagen: {e}")
+
 # ── Gunicorn entry point ────────────────────────────────────────────────
 application = app
+threading.Thread(target=_warmup, daemon=True).start()
 
 def start(host="0.0.0.0", port=5789, debug=False):
     print(f"[Server] JARVIS Web UI unter http://{host}:{port}")

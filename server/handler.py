@@ -100,6 +100,12 @@ def _execute_action(name: str, args: dict) -> str:
         elif name == "admin_api":
             from actions.admin_api import admin_action
             return admin_action(parameters=args)
+        elif name == "claude_bridge":
+            from actions.claude_bridge import claude_action
+            return claude_action(parameters=args)
+        elif name == "project_watch":
+            from actions.project_watcher import project_watch_action
+            return project_watch_action(parameters=args)
         elif name == "do_briefing":
             from actions.briefing_action import do_briefing
             return do_briefing(parameters=args)
@@ -191,7 +197,9 @@ def _execute_action(name: str, args: dict) -> str:
             from actions.agent_task import agent_task
             return agent_task(parameters=args)
         else:
-            return f"Unbekannte Aktion: {name}"
+            from actions.plugin_loader import run_plugin
+            r = run_plugin(name, args)
+            return r if r is not None else f"Unbekannte Aktion: {name}"
     except Exception as e:
         return f"Fehler in {name}: {e}"
 
