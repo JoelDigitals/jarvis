@@ -76,16 +76,17 @@ def chat():
     if not text:
         return jsonify({"error": "Leere Nachricht"}), 400
     try:
-        answer, logs = send_message(text)
+        answer, logs = send_message(text, username=request.jarvis_user)
         return jsonify({"response": answer, "logs": logs})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/reset", methods=["POST"])
+@require_login
 def reset():
     import server.handler as h
-    with h._session_lock:
-        h._session = None
+    with h._sessions_lock:
+        h._sessions.pop(request.jarvis_user, None)
     return jsonify({"ok": True})
 
 @app.route("/api/config", methods=["GET", "POST"])

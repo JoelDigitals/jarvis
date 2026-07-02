@@ -1,4 +1,5 @@
-import os, json, sys, traceback
+"""JARVIS Server Handler – vollständig serverunabhängig, keine main.py-Abhängigkeit"""
+import os, json, threading, traceback
 from pathlib import Path
 from datetime import datetime
 
@@ -7,55 +8,368 @@ from google.genai import types
 
 BASE = Path(__file__).resolve().parent.parent
 
+# Erkennt ob JARVIS auf einem Server (Linux/Cloud) oder lokal (Windows) läuft
+_IS_SERVER = os.name != "nt" or bool(os.environ.get("JARVIS_SERVER_MODE"))
+
+
 def _load_settings():
     try:
         p = BASE / "config" / "settings.json"
         if p.exists():
             return json.loads(p.read_text(encoding="utf-8"))
-    except: pass
+    except Exception as e:
+        print(f"[Handler] settings.json Fehler: {e}")
     return {}
+
 
 def _load_system_prompt():
     p = BASE / "core" / "prompt.txt"
-    return p.read_text(encoding="utf-8") if p.exists() else "Du bist JARVIS."
+    return p.read_text(encoding="utf-8") if p.exists() else "Du bist JARVIS, ein KI-Assistent von Joel Digitals."
+
 
 def _get_api_key():
-    key = os.environ.get("GEMINI_API_KEY", "") or os.environ.get("gemini_api_key", "")
-    if key:
-        return key
+    for env in ("GEMINI_API_KEY", "gemini_api_key"):
+        val = os.environ.get(env, "")
+        if val:
+            return val
     try:
         p = BASE / "config" / "api_keys.json"
         if p.exists():
             data = json.loads(p.read_text(encoding="utf-8"))
             for k in ("gemini_api_key", "GEMINI_API_KEY", "api_key"):
-                val = data.get(k)
-                if val:
-                    return val
-    except: pass
+                if data.get(k):
+                    return data[k]
+    except Exception:
+        pass
     try:
-        p = BASE / "config" / "settings.json"
-        if p.exists():
-            return json.loads(p.read_text(encoding="utf-8")).get("api_key", "")
-    except: pass
+        return json.loads((BASE / "config" / "settings.json").read_text(encoding="utf-8")).get("api_key", "")
+    except Exception:
+        pass
     return ""
 
+
+# ── Tool-Deklarationen (vollständig, ohne main.py) ─────────────────────────
+
+TOOL_DECLARATIONS = [
+    {
+        "name": "web_search",
+        "description": "Sucht im Web nach aktuellen Informationen, Nachrichten, Preisen, etc.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "query":  {"type": "STRING", "description": "Suchanfrage"},
+                "mode":   {"type": "STRING", "description": "search (Standard) oder compare"},
+                "items":  {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Zu vergleichende Elemente"},
+                "aspect": {"type": "STRING", "description": "price | specs | reviews"},
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "weather_report",
+        "description": "Gibt den aktuellen Wetterbericht für eine Stadt zurück.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "city": {"type": "STRING", "description": "Stadtname"},
+                "days": {"type": "INTEGER", "description": "Vorhersage-Tage (Standard 1)"}
+            },
+            "required": ["city"]
+        }
+    },
+    {
+        "name": "email_manager",
+        "description": "E-Mail-Management: list (ungelesene), read (einzelne lesen), send (senden), accounts (Konten anzeigen).",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action":      {"type": "STRING", "description": "list | read | send | accounts"},
+                "account":     {"type": "STRING", "description": "Konto-Name (optional)"},
+                "count":       {"type": "INTEGER", "description": "Anzahl (list)"},
+                "unread_only": {"type": "BOOLEAN", "description": "Nur ungelesene"},
+                "email_id":    {"type": "STRING", "description": "E-Mail-ID (read)"},
+                "to":          {"type": "STRING", "description": "Empfänger (send)"},
+                "subject":     {"type": "STRING", "description": "Betreff (send)"},
+                "body":        {"type": "STRING", "description": "Inhalt (send)"},
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "jds_connect",
+        "description": "JDS CRM & ERP: dashboard, tasks, customers, meetings, leads, products, invoices, events, notifications, finance, incomes, expenses.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action":    {"type": "STRING", "description": "setup | connect | status | dashboard | tasks | task | meetings | leads | customers | products | vacations | deliveries | invoices | events | notifications | storage | users | finance | incomes | expenses | away_briefing"},
+                "base_url":  {"type": "STRING", "description": "JDS-Basis-URL"},
+                "team_code": {"type": "STRING", "description": "Teamcode"},
+                "api_token": {"type": "STRING", "description": "API-Token"},
+                "filter":    {"type": "STRING", "description": "Filter für tasks: me | todo | user:name"},
+                "id":        {"type": "INTEGER", "description": "ID für Detail-Ansicht"},
+                "from":      {"type": "STRING", "description": "Start-Datum YYYY-MM-DD"},
+                "to":        {"type": "STRING", "description": "End-Datum YYYY-MM-DD"},
+                "since":     {"type": "STRING", "description": "Seit-Datum YYYY-MM-DD"},
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "admin_api",
+        "description": "Joel-Digitals.de Admin-API: Bestellungen, Termine, Blog-Stats, Support-Tickets, Briefing.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action":  {"type": "STRING", "description": "dashboard | appointments | confirm_appointment | reject_appointment | blog | tickets | reply_ticket | orders | briefing"},
+                "status":  {"type": "STRING", "description": "pending | confirmed | rejected | open | closed"},
+                "id":      {"type": "INTEGER", "description": "ID für confirm/reject/reply"},
+                "message": {"type": "STRING", "description": "Nachricht für reply_ticket"},
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "maps_api",
+        "description": "Karten-Funktionen: geocode, directions, distance, search via OpenStreetMap.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action":      {"type": "STRING", "description": "geocode | directions | distance | search"},
+                "location":    {"type": "STRING", "description": "Ort für geocode"},
+                "origin":      {"type": "STRING", "description": "Startort"},
+                "destination": {"type": "STRING", "description": "Zielort"},
+                "query":       {"type": "STRING", "description": "Suchbegriff"},
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "tankpreise",
+        "description": "Deutsche Tankstellenpreise (Tankerkoenig API).",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action":     {"type": "STRING", "description": "search | stations | prices"},
+                "lat":        {"type": "NUMBER", "description": "Breitengrad"},
+                "lng":        {"type": "NUMBER", "description": "Längengrad"},
+                "radius":     {"type": "INTEGER", "description": "Suchradius km"},
+                "fuel":       {"type": "STRING", "description": "e5 | e10 | diesel"},
+                "station_id": {"type": "STRING", "description": "Station-ID"},
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "web_summarizer",
+        "description": "Webseite zusammenfassen, analysieren oder Inhalte extrahieren.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "url":    {"type": "STRING", "description": "Webseiten-URL"},
+                "action": {"type": "STRING", "description": "summarize | analyze | extract"},
+            },
+            "required": ["url", "action"]
+        }
+    },
+    {
+        "name": "memory_manager",
+        "description": "Persönliches Gedächtnis: Informationen speichern und abrufen.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {"type": "STRING", "description": "recall | save"},
+                "key":    {"type": "STRING", "description": "Schlüssel"},
+                "value":  {"type": "STRING", "description": "Wert (save)"},
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "save_memory",
+        "description": "Speichert eine persönliche Information. Kategorien: identity, preferences, projects, relationships, wishes, notes.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "category": {"type": "STRING", "description": "Kategorie"},
+                "key":      {"type": "STRING", "description": "Schlüsselname"},
+                "value":    {"type": "STRING", "description": "Wert"},
+            },
+            "required": ["category", "key", "value"]
+        }
+    },
+    {
+        "name": "knowledge_base",
+        "description": "Wissensdatenbank für Firma, Kunden, Prozesse, Produkte. Aktionen: set, get, delete.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action":   {"type": "STRING", "description": "set | get | delete"},
+                "category": {"type": "STRING", "description": "company | customers | processes | products | contacts | support | notes"},
+                "key":      {"type": "STRING", "description": "Schlüsselname"},
+                "value":    {"type": "STRING", "description": "Wert (set)"},
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "do_briefing",
+        "description": "Komplettes Morgen-Briefing: Wetter, JDS-Aufgaben, E-Mails, Admin-Dashboard in einem Aufruf.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "greeting": {"type": "STRING", "description": "Begrüßungsformel (optional)"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "db_action",
+        "description": "Datenbank-Client: connect, tables, query, schema. SQLite/PostgreSQL/MySQL.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action":   {"type": "STRING", "description": "connect | disconnect | tables | query | schema"},
+                "name":     {"type": "STRING", "description": "Verbindungsname"},
+                "type":     {"type": "STRING", "description": "sqlite | postgresql | mysql"},
+                "host":     {"type": "STRING", "description": "DB-Host"},
+                "port":     {"type": "INTEGER", "description": "DB-Port"},
+                "database": {"type": "STRING", "description": "Datenbankname"},
+                "user":     {"type": "STRING", "description": "DB-Benutzer"},
+                "password": {"type": "STRING", "description": "DB-Passwort"},
+                "path":     {"type": "STRING", "description": "SQLite-Pfad"},
+                "sql":      {"type": "STRING", "description": "SQL-Abfrage"},
+                "table":    {"type": "STRING", "description": "Tabellenname"},
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "claude_bridge",
+        "description": "Nutzt Claude AI für komplexe Code-Aufgaben, Projekt-Analysen und autonome Programmier-Tasks (project_task).",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action":       {"type": "STRING", "description": "ask | project_task"},
+                "prompt":       {"type": "STRING", "description": "Aufgabe oder Frage"},
+                "project_path": {"type": "STRING", "description": "Projektpfad für project_task"},
+                "task":         {"type": "STRING", "description": "Aufgabenbeschreibung"},
+                "run_command":  {"type": "STRING", "description": "Test-Befehl (optional)"},
+            },
+            "required": ["action", "prompt"]
+        }
+    },
+    {
+        "name": "project_watch",
+        "description": "Projektordner auf Fehler überwachen: add, remove, list, scan_now.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {"type": "STRING", "description": "add | remove | list | scan_now"},
+                "path":   {"type": "STRING", "description": "Projektpfad"},
+                "name":   {"type": "STRING", "description": "Projektname"},
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "calendar_manager",
+        "description": "Kalender verwalten: Termine anlegen, anzeigen, löschen.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {"type": "STRING", "description": "add | list | delete | today | week"},
+                "title":  {"type": "STRING", "description": "Titel"},
+                "date":   {"type": "STRING", "description": "Datum YYYY-MM-DD"},
+                "time":   {"type": "STRING", "description": "Uhrzeit HH:MM"},
+                "end":    {"type": "STRING", "description": "Endzeit HH:MM"},
+                "id":     {"type": "STRING", "description": "Termin-ID (delete)"},
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "file_processor",
+        "description": "Dateien verarbeiten: lesen, konvertieren, analysieren (PDF, DOCX, CSV, Bilder, etc.).",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {"type": "STRING", "description": "read | convert | analyze | summarize"},
+                "path":   {"type": "STRING", "description": "Dateipfad"},
+                "format": {"type": "STRING", "description": "Zielformat (convert)"},
+            },
+            "required": ["action", "path"]
+        }
+    },
+    {
+        "name": "reminder",
+        "description": "Erinnerung einstellen.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "date":    {"type": "STRING", "description": "Datum YYYY-MM-DD"},
+                "time":    {"type": "STRING", "description": "Uhrzeit HH:MM"},
+                "message": {"type": "STRING", "description": "Erinnerungstext"},
+            },
+            "required": ["date", "time", "message"]
+        }
+    },
+]
+
+# Desktop-Only Tools (nur lokal sinnvoll, auf dem Server wird eine Meldung zurückgegeben)
+_DESKTOP_ONLY = {
+    "open_app", "computer_control", "computer_settings", "screen_process",
+    "focus_app", "open_chrome", "morning_routine", "play_music", "game_updater",
+    "wecker", "youtube_video", "dev_agent", "code_helper", "flight_finder",
+    "file_controller", "agent_task",
+}
+
+# Desktop-Only Tools werden auf dem Server mit Hinweis zurückgegeben, lokal normal ausgeführt
+_DESKTOP_TOOL_DECLARATIONS = [
+    {
+        "name": "open_app",
+        "description": "Öffnet eine Anwendung auf dem lokalen Computer (nur lokal verfügbar).",
+        "parameters": {"type": "OBJECT", "properties": {"app_name": {"type": "STRING"}}, "required": ["app_name"]}
+    },
+    {
+        "name": "computer_control",
+        "description": "Steuert den lokalen Computer: Lautstärke, Bildschirm, etc. (nur lokal).",
+        "parameters": {"type": "OBJECT", "properties": {"action": {"type": "STRING"}}, "required": ["action"]}
+    },
+    {
+        "name": "wecker",
+        "description": "Wecker stellen und Musik abspielen auf dem lokalen PC (nur lokal).",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {"type": "STRING", "description": "set | list | remove | play | stop"},
+                "time":   {"type": "STRING"},
+                "id":     {"type": "INTEGER"},
+                "music":  {"type": "STRING"},
+            },
+            "required": ["action"]
+        }
+    },
+]
+
+
 def _execute_action(name: str, args: dict) -> str:
+    # Desktop-Only-Schutz
+    if _IS_SERVER and name in _DESKTOP_ONLY:
+        return f"'{name}' ist nur im lokalen JARVIS-Betrieb verfügbar (benötigt Windows/Desktop)."
+
     try:
         if name == "open_app":
             from actions.open_app import open_app
             return open_app(parameters=args)
-        elif name == "weather_report":
-            from actions.weather_report import weather_action
-            return weather_action(parameters=args)
-        elif name == "weather_action":
+        elif name in ("weather_report", "weather_action"):
             from actions.weather_report import weather_action
             return weather_action(parameters=args)
         elif name == "web_search":
             from actions.web_search import web_search
             return web_search(parameters=args)
         elif name == "web_summarizer":
-            from actions.web_summarizer import web_summarizer
-            return web_summarizer(parameters=args)
+            from actions.web_summarizer import web_summarize
+            return web_summarize(parameters=args)
         elif name == "email_manager":
             from actions.email_manager import email_action
             return email_action(parameters=args)
@@ -72,10 +386,18 @@ def _execute_action(name: str, args: dict) -> str:
             from memory.memory_manager import recall_memory, save_memory
             a = (args.get("action") or "").strip().lower()
             if a == "save":
-                save_memory(args.get("key",""), args.get("value",""))
+                save_memory(args.get("key", ""), args.get("value", ""))
                 return f"Gemerkt: {args.get('key')} = {args.get('value')}"
-            else:
-                return recall_memory(args.get("key",""))
+            return recall_memory(args.get("key", ""))
+        elif name == "save_memory":
+            from memory.memory_manager import save_memory
+            cat = args.get("category", "notes")
+            key = args.get("key", "")
+            val = args.get("value", "")
+            if key and val:
+                save_memory({cat: {key: {"value": val}}})
+                return f"Gemerkt: {cat} → {key} = {val}"
+            return "Key und value erforderlich."
         elif name == "tankpreise":
             from actions.tankpreise import tankpreise
             return tankpreise(parameters=args)
@@ -115,15 +437,6 @@ def _execute_action(name: str, args: dict) -> str:
         elif name == "knowledge_base":
             from actions.knowledge_base import kb_action
             return kb_action(parameters=args)
-        elif name == "save_memory":
-            from memory.memory_manager import recall_memory, save_memory
-            cat = args.get("category", "notes")
-            key = args.get("key", "")
-            val = args.get("value", "")
-            if key and val:
-                save_memory({cat: {key: {"value": val}}})
-                return f"Gemerkt: {cat} → {key} = {val}"
-            return "Key und value erforderlich."
         elif name == "set_autopilot":
             from actions.email_manager import email_action
             cfg = _load_settings()
@@ -138,47 +451,48 @@ def _execute_action(name: str, args: dict) -> str:
                         "body": "Autopilot wurde aktiviert. JARVIS hält die Stellung."})
                     result += " Status-Mail gesendet."
                 return result
-            else:
-                return "Autopilot deaktiviert."
+            return "Autopilot deaktiviert."
         elif name == "calendar_manager":
             from actions.calendar_manager import calendar_action
             return calendar_action(parameters=args)
         elif name == "morning_routine":
+            if _IS_SERVER:
+                return "morning_routine nur lokal verfügbar."
             from actions.wake_manager import run_morning_routine
             return run_morning_routine()
         elif name == "play_music":
+            if _IS_SERVER:
+                return "play_music nur lokal verfügbar."
             from actions.wake_manager import open_spotify
             url = args.get("url", "")
             ok = open_spotify(url) if url else open_spotify()
-            return "Musik gestartet." if ok else "Konnte Musik nicht starten."
+            return "Musik gestartet." if ok else "Musik nicht gestartet."
         elif name == "focus_app":
+            if _IS_SERVER:
+                return "focus_app nur lokal verfügbar."
             app = args.get("app", "").strip().lower()
             if app in ("cursor", "code", "vscode"):
                 from actions.wake_manager import focus_cursor
                 ok = focus_cursor()
                 return "Cursor fokussiert." if ok else "Cursor gestartet."
-            elif app == "chrome":
-                from actions.wake_manager import _chrome_exe
-                exe = _chrome_exe()
-                if exe:
-                    import subprocess
-                    subprocess.Popen([exe], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    return "Chrome geöffnet."
-                return "Chrome nicht gefunden."
             return f"Unbekannte App: {app}"
         elif name == "open_chrome":
+            if _IS_SERVER:
+                return "open_chrome nur lokal verfügbar."
             from actions.wake_manager import open_chrome_url
             url = args.get("url", "")
             if not url:
-                return "Keine URL angegeben."
-            monitor = args.get("monitor", 1)
-            fullscreen = args.get("fullscreen", True)
-            open_chrome_url(url, monitor, fullscreen)
-            return f"Chrome geöffnet: {url[:50]}"
+                return "Keine URL."
+            open_chrome_url(url, args.get("monitor", 1), args.get("fullscreen", True))
+            return f"Chrome geöffnet: {url[:60]}"
         elif name == "computer_settings":
+            if _IS_SERVER:
+                return "computer_settings nur lokal verfügbar."
             from actions.computer_settings import computer_settings
             return computer_settings(parameters=args)
         elif name == "screen_process":
+            if _IS_SERVER:
+                return "screen_process nur lokal verfügbar."
             from actions.screen_processor import screen_process
             return screen_process(parameters=args)
         elif name == "dev_agent":
@@ -191,358 +505,71 @@ def _execute_action(name: str, args: dict) -> str:
             from actions.flight_finder import flight_finder
             return flight_finder(parameters=args)
         elif name == "file_controller":
+            if _IS_SERVER:
+                return "file_controller nur lokal verfügbar."
             from actions.file_controller import file_controller
             return file_controller(parameters=args)
         elif name == "agent_task":
             from actions.agent_task import agent_task
             return agent_task(parameters=args)
         else:
-            from actions.plugin_loader import run_plugin
-            r = run_plugin(name, args)
-            return r if r is not None else f"Unbekannte Aktion: {name}"
+            # Plugin-System
+            try:
+                from actions.plugin_loader import run_plugin
+                r = run_plugin(name, args)
+                if r is not None:
+                    return r
+            except Exception:
+                pass
+            return f"Unbekannte Aktion: {name}"
     except Exception as e:
+        traceback.print_exc()
         return f"Fehler in {name}: {e}"
 
-# Importiere Tool-Deklarationen aus main.py, um Sync zu halten.
-# Funktioniert sowohl bei python main.py --server als auch bei modularem Import.
-_MAIN_TOOLS = None
-try:
-    import __main__ as _main_mod
-    _MAIN_TOOLS = getattr(_main_mod, 'TOOL_DECLARATIONS', None)
-except Exception:
-    pass
-if _MAIN_TOOLS is None:
-    try:
-        import importlib
-        _spec = importlib.util.spec_from_file_location(
-            'main', str(Path(__file__).resolve().parent.parent / 'main.py'))
-        if _spec:
-            _mod = importlib.util.module_from_spec(_spec)
-            _spec.loader.exec_module(_mod)
-            _MAIN_TOOLS = getattr(_mod, 'TOOL_DECLARATIONS', None)
-    except Exception:
-        _MAIN_TOOLS = None
 
-TOOLS = None
+# ── Chat Session (pro User) ────────────────────────────────────────────────
 
-def _make_tools() -> list[dict]:
-    if _MAIN_TOOLS:
-        return [types.Tool(function_declarations=[d]) for d in _MAIN_TOOLS]
-    # Fallback: eigene Liste
-    declarations = [
-        {
-            "name": "open_app",
-            "description": "Opens any application on the computer. Use this whenever the user asks to open, launch, or start any app, website, or program.",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "app_name": {"type": "STRING", "description": "Exact name of the application (e.g. 'WhatsApp', 'Chrome', 'Spotify')"}
-                },
-                "required": ["app_name"]
-            }
-        },
-        {
-            "name": "web_search",
-            "description": "Searches the web for any information.",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "query":  {"type": "STRING", "description": "Search query"},
-                    "mode":   {"type": "STRING", "description": "search (default) or compare"},
-                    "items":  {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Items to compare"},
-                    "aspect": {"type": "STRING", "description": "price | specs | reviews"}
-                },
-                "required": ["query"]
-            }
-        },
-        {
-            "name": "weather_report",
-            "description": "Gives the weather report to user",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "city": {"type": "STRING", "description": "City name"},
-                    "days": {"type": "INTEGER", "description": "Forecast days (default 1)"}
-                },
-                "required": ["city"]
-            }
-        },
-        {
-            "name": "send_message",
-            "description": "EXPLICIT USER REQUEST ONLY. Types a text message into a messaging app (WhatsApp, Telegram, etc.) for a DIFFERENT PERSON. NEVER use this to respond to the user — responses are spoken via audio automatically. Only use when the user explicitly says 'send a message to [person]'.",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "receiver":     {"type": "STRING", "description": "Recipient contact name (a different person, NOT the user)"},
-                    "message_text": {"type": "STRING", "description": "The message text to send"},
-                    "platform":     {"type": "STRING", "description": "Platform: WhatsApp, Telegram, etc."}
-                },
-                "required": ["receiver", "message_text", "platform"]
-            }
-        },
-        {
-            "name": "reminder",
-            "description": "Sets a timed reminder using Windows Task Scheduler.",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "date":    {"type": "STRING", "description": "Date in YYYY-MM-DD format"},
-                    "time":    {"type": "STRING", "description": "Time in HH:MM format (24h)"},
-                    "message": {"type": "STRING", "description": "Reminder message text"}
-                },
-                "required": ["date", "time", "message"]
-            }
-        },
-        {
-            "name": "youtube_video",
-            "description": "Controls YouTube: play, summarize, get_info, trending.",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "action": {"type": "STRING", "description": "play | summarize | get_info | trending"},
-                    "query":  {"type": "STRING", "description": "Search query"},
-                    "url":    {"type": "STRING", "description": "Video URL"},
-                },
-                "required": []
-            }
-        },
-        {
-            "name": "email_manager",
-            "description": "E-Mail-Management: list (ungelesene auflisten), read (lesen), send (senden), setup (Konto einrichten). Jedes Konto hat einen Namen — account-Parameter nutzen.",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "action":   {"type": "STRING", "description": "list | read | send | setup"},
-                    "account":  {"type": "STRING", "description": "Konto-Name/Label (optional, default: erstes Konto)"},
-                    "count":    {"type": "INTEGER", "description": "Anzahl (list)"},
-                    "email_id": {"type": "STRING", "description": "E-Mail-ID (read)"},
-                    "to":       {"type": "STRING", "description": "Empfänger (send)"},
-                    "subject":  {"type": "STRING", "description": "Betreff (send)"},
-                    "body":     {"type": "STRING", "description": "Nachricht (send)"},
-                },
-                "required": ["action"]
-            }
-        },
-        {
-            "name": "jds_connect",
-            "description": "JDS ERP-System: dashboard/tasks/customers/meetings/leads/products/vacations/deliveries/invoices/events/notifications/storage/users/finance/incomes/expenses/away_briefing. setup zum Konfigurieren, connect zum Verbinden.",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "action":    {"type": "STRING", "description": "setup | connect | status | dashboard | tasks | task | meetings | leads | customers | products | vacations | deliveries | invoices | events | notifications | storage | users | finance | incomes | expenses | away_briefing"},
-                    "base_url":  {"type": "STRING", "description": "JDS-Basis-URL (setup)"},
-                    "team_code": {"type": "STRING", "description": "Teamcode (setup)"},
-                    "api_token": {"type": "STRING", "description": "API-Token (setup)"},
-                    "filter":    {"type": "STRING", "description": "Filter für tasks: me | todo | user:name"},
-                    "id":        {"type": "INTEGER", "description": "ID für task-Detail"},
-                    "from":      {"type": "STRING", "description": "Start-Datum (YYYY-MM-DD) für incomes/expenses/away_briefing"},
-                    "to":        {"type": "STRING", "description": "End-Datum (YYYY-MM-DD) für incomes/expenses"},
-                    "since":     {"type": "STRING", "description": "Start-Datum (YYYY-MM-DD) für away_briefing"},
-                },
-                "required": ["action"]
-            }
-        },
-        {
-            "name": "knowledge_sites",
-            "description": "Durchsucht konfigurierte Wissensseiten (Login + Scrape). Aktionen: list (auflisten), query (Seite öffnen + Inhalt holen).",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "action":    {"type": "STRING", "description": "list | query"},
-                    "site_name": {"type": "STRING", "description": "Name der Wissensseite"},
-                    "query":     {"type": "STRING", "description": "Suchbegriff"},
-                },
-                "required": ["action"]
-            }
-        },
-        {
-            "name": "tankpreise",
-            "description": "Deutsche Tankstellenpreise via Tankerkoenig API.",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "action":     {"type": "STRING", "description": "search | stations | prices"},
-                    "lat":        {"type": "NUMBER", "description": "Breitengrad"},
-                    "lng":        {"type": "NUMBER", "description": "Längengrad"},
-                    "radius":     {"type": "INTEGER", "description": "Suchradius (default 5)"},
-                    "fuel":       {"type": "STRING", "description": "e5 | e10 | diesel"},
-                    "station_id": {"type": "STRING", "description": "Station-ID für prices"},
-                },
-                "required": ["action"]
-            }
-        },
-        {
-            "name": "maps_api",
-            "description": "Karten-Funktionen: geocode/directions/distance/search (OpenStreetMap).",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "action":    {"type": "STRING", "description": "geocode | directions | distance | search"},
-                    "location":  {"type": "STRING", "description": "Ort für geocode"},
-                    "origin":    {"type": "STRING", "description": "Startort für directions"},
-                    "destination": {"type": "STRING", "description": "Zielort für directions"},
-                    "query":     {"type": "STRING", "description": "Suchbegriff für search"},
-                },
-                "required": ["action"]
-            }
-        },
-        {
-            "name": "db_action",
-            "description": "Datenbank-Client: connect/disconnect/tables/query/schema. SQLite/PostgreSQL/MySQL.",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "action":   {"type": "STRING", "description": "connect | disconnect | tables | query | schema"},
-                    "name":     {"type": "STRING", "description": "Verbindungsname"},
-                    "type":     {"type": "STRING", "description": "sqlite | postgresql | mysql"},
-                    "host":     {"type": "STRING", "description": "DB-Host"},
-                    "port":     {"type": "INTEGER", "description": "DB-Port"},
-                    "database": {"type": "STRING", "description": "Datenbankname"},
-                    "user":     {"type": "STRING", "description": "DB-Benutzer"},
-                    "password": {"type": "STRING", "description": "DB-Passwort"},
-                    "path":     {"type": "STRING", "description": "Dateipfad für SQLite"},
-                    "sql":      {"type": "STRING", "description": "SQL-Abfrage"},
-                    "table":    {"type": "STRING", "description": "Tabellenname"},
-                },
-                "required": ["action"]
-            }
-        },
-        {
-            "name": "web_summarize",
-            "description": "Webseite zusammenfassen oder analysieren (url + action: summarize/analyze/extract).",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "url":    {"type": "STRING", "description": "Webseiten-URL"},
-                    "action": {"type": "STRING", "description": "summarize | analyze | extract"},
-                },
-                "required": ["url", "action"]
-            }
-        },
-        {
-            "name": "admin_api",
-            "description": "Joel-Digitals.de Admin-API. Prüft Bestellungen, Termine, Blog-Stats, Support-Tickets. Aktionen: dashboard (Übersicht), appointments (Termine), orders (Bestellungen), blog (Blog-Stats), tickets (Support-Tickets), confirm_appointment / reject_appointment (Termin bestätigen/ablehnen), reply_ticket (auf Ticket antworten), briefing (alles auf einmal fürs Morgen-Briefing).",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "action":  {"type": "STRING", "description": "dashboard | appointments | confirm_appointment | reject_appointment | blog | tickets | reply_ticket | orders | briefing"},
-                    "status":  {"type": "STRING", "description": "Filter: pending | confirmed | rejected | open | closed"},
-                    "id":      {"type": "INTEGER", "description": "ID für confirm/reject/reply"},
-                    "message": {"type": "STRING", "description": "Nachricht für reply_ticket"},
-                },
-                "required": ["action"]
-            }
-        },
-        {
-            "name": "memory_manager",
-            "description": "Speichert und ruft Informationen aus dem Gedächtnis ab. Aktionen: recall (abrufen), save (speichern).",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "action": {"type": "STRING", "description": "recall | save"},
-                    "key":    {"type": "STRING", "description": "Schlüssel für recall/save"},
-                    "value":  {"type": "STRING", "description": "Wert für save"},
-                },
-                "required": ["action"]
-            }
-        },
-        {
-            "name": "do_briefing",
-            "description": "Führt das gesamte Morgen-Briefing in EINEM Aufruf aus: Wetter, JDS-Aufgaben, E-Mails, Admin-Dashboard. Einziger Aufruf für das Briefing.",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {},
-                "required": []
-            }
-        },
-        {
-            "name": "wecker",
-            "description": "Wecker (Alarm) und Musik-Steuerung. Aktionen: set (stellen), list (anzeigen), remove (entfernen), play (Musik abspielen), stop (Musik stoppen). Musikdateien im music/-Ordner.",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "action": {"type": "STRING", "description": "set | list | remove | play | stop"},
-                    "time":   {"type": "STRING", "description": "Uhrzeit HH:MM für set"},
-                    "id":     {"type": "INTEGER", "description": "Wecker-ID für remove"},
-                    "music":  {"type": "STRING", "description": "Musikdatei-Name (optional)"},
-                },
-                "required": ["action"]
-            }
-        },
-        {
-            "name": "knowledge_base",
-            "description": "Wissensdatenbank für dauerhafte Informationen über die Firma, Kunden, Prozesse, Produkte. Aktionen: set (speichern), get (abrufen), delete (löschen). Kategorien: company, customers, processes, products, contacts, support, notes.",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "action":   {"type": "STRING", "description": "set | get | delete"},
-                    "category": {"type": "STRING", "description": "Kategorie z.B. company, customers, processes, products"},
-                    "key":      {"type": "STRING", "description": "Schlüsselname"},
-                    "value":    {"type": "STRING", "description": "Wert für set"},
-                },
-                "required": ["action"]
-            }
-        },
-        {
-            "name": "save_memory",
-            "description": "Speichert eine persönliche Information über den Nutzer im Gedächtnis. Kategorien: identity, preferences, projects, relationships, wishes, notes.",
-            "parameters": {
-                "type": "OBJECT",
-                "properties": {
-                    "category": {"type": "STRING", "description": "Kategorie: identity, preferences, projects, relationships, wishes, notes"},
-                    "key":      {"type": "STRING", "description": "Schlüsselname (snake_case)"},
-                    "value":    {"type": "STRING", "description": "Wert"},
-                },
-                "required": ["category", "key", "value"]
-            }
-        },
-    ]
+def _build_tools():
+    declarations = TOOL_DECLARATIONS[:]
+    if not _IS_SERVER:
+        declarations += _DESKTOP_TOOL_DECLARATIONS
     return [types.Tool(function_declarations=[d]) for d in declarations]
 
-TOOLS: list | None = None
-
-def _get_tools():
-    global TOOLS
-    if TOOLS is not None:
-        return TOOLS
-    TOOLS = _make_tools()
-    return TOOLS
 
 class ChatSession:
-    def __init__(self):
+    def __init__(self, username: str = "anon"):
         self._chat = None
         self._client = None
+        self._username = username
+        self._lock = threading.Lock()
 
     def start(self, api_key: str):
-        genai_client = genai.Client(api_key=api_key)
-        self._client = genai_client
+        client = genai.Client(api_key=api_key)
+        self._client = client
         cfg = _load_settings()
-        user_name = cfg.get("user_name", "Sir")
-        email_info = ""
+        user_name = cfg.get("user_name", "Joel")
+        system = _load_system_prompt().replace("{user_name}", user_name)
+
         accounts = cfg.get("email_accounts", [])
         if accounts:
-            names = ", ".join(a.get("name", a.get("email", "?")) for a in accounts)
-            email_info = f"\nE-Mail-Konten: {names}"
+            system += "\nE-Mail-Konten: " + ", ".join(a.get("name", a.get("email", "?")) for a in accounts)
         jds = cfg.get("jds_config", {})
-        jds_info = f"\nJDS: {jds.get('base_url','nicht konfiguriert')}" if jds.get("base_url") else ""
+        if jds.get("base_url"):
+            system += f"\nJDS: {jds['base_url']}"
+        if _IS_SERVER:
+            system += "\n\nHinweis: JARVIS läuft im Server-Modus. Desktop-Funktionen (Apps öffnen, Wecker, etc.) sind nicht verfügbar."
 
-        system = _load_system_prompt()
-        system = system.replace("{user_name}", user_name)
-        system += f"\n\nAktuelle Konfiguration:{email_info}{jds_info}"
-
-        self._chat = genai_client.chats.create(
+        self._chat = client.chats.create(
             model="gemini-2.5-flash",
             config=types.GenerateContentConfig(
                 system_instruction=system,
-                tools=_get_tools(),
+                tools=_build_tools(),
                 temperature=0.7,
             ),
         )
-        return self._chat
 
     def _send_with_retry(self, msg):
-        import time
-        import random
+        import time, random
         for attempt in range(3):
             try:
                 return self._chat.send_message(msg)
@@ -550,63 +577,66 @@ class ChatSession:
                 err = str(e)
                 if "429" in err or "RESOURCE_EXHAUSTED" in err:
                     wait = min(2 ** attempt * 3 + random.uniform(0, 2), 30)
-                    print(f"[JARVIS] Rate limit, retry in {wait:.0f}s ({attempt+1}/3)")
+                    print(f"[Handler] Rate limit, Retry in {wait:.0f}s ({attempt+1}/3)")
                     time.sleep(wait)
                     continue
-                if attempt < 1:
-                    wait = 2
-                    print(f"[JARVIS] {err[:80]}, retry in {wait}s (1/3)")
-                    time.sleep(wait)
+                if attempt == 0:
+                    time.sleep(2)
                     continue
                 raise
-        raise Exception("Rate limit exceeded after 3 retries.")
+        raise Exception("Rate limit nach 3 Versuchen erschöpft.")
 
     def send(self, text: str) -> tuple[str, list[dict]]:
         logs = []
         if not self._chat:
             return "Chat nicht initialisiert.", logs
-        response = self._send_with_retry(text)
-        answer_parts = []
-        while True:
-            try:
-                candidate = response.candidates[0]
-                for part in candidate.content.parts:
-                    if part.text:
-                        answer_parts.append(part.text)
-                    elif part.function_call:
-                        fc = part.function_call
-                        name = fc.name
-                        args = {k: v for k, v in fc.args.items()}
-                        logs.append({"tool": name, "args": args})
-                        result = _execute_action(name, args)
-                        logs.append({"result": (result or "")[:200]})
-                        response = self._send_with_retry(
-                            types.Content(
-                                parts=[types.Part.from_function_response(
-                                    name=name,
-                                    response={"content": result or ""},
-                                )]
+
+        with self._lock:
+            response = self._send_with_retry(text)
+            answer_parts = []
+            while True:
+                try:
+                    candidate = response.candidates[0]
+                    for part in candidate.content.parts:
+                        if part.text:
+                            answer_parts.append(part.text)
+                        elif part.function_call:
+                            fc = part.function_call
+                            name = fc.name
+                            args = dict(fc.args)
+                            print(f"[Handler] 🔧 {name} {str(args)[:80]}")
+                            logs.append({"tool": name, "args": args})
+                            result = _execute_action(name, args)
+                            print(f"[Handler] ✅ {name} → {str(result)[:80]}")
+                            logs.append({"result": (result or "")[:200]})
+                            response = self._send_with_retry(
+                                types.Content(parts=[
+                                    types.Part.from_function_response(name=name, response={"content": result or ""})
+                                ])
                             )
-                        )
-            except (IndexError, AttributeError):
-                break
+                except (IndexError, AttributeError):
+                    break
         return " ".join(answer_parts) if answer_parts else "", logs
 
-_session = None
-_session_lock = __import__('threading').Lock()
 
-def get_session():
-    global _session
-    with _session_lock:
-        if _session is None:
-            _session = ChatSession()
-    return _session
+# ── Session Registry (pro User) ───────────────────────────────────────────
 
-def send_message(text: str) -> tuple[str, list[dict]]:
-    session = get_session()
+_sessions: dict[str, ChatSession] = {}
+_sessions_lock = threading.Lock()
+
+
+def get_session(username: str = "default") -> ChatSession:
+    with _sessions_lock:
+        if username not in _sessions:
+            _sessions[username] = ChatSession(username)
+        return _sessions[username]
+
+
+def send_message(text: str, username: str = "default") -> tuple[str, list[dict]]:
+    session = get_session(username)
     api_key = _get_api_key()
     if not api_key:
-        return "Kein API-Key konfiguriert. Bitte in den Einstellungen hinterlegen.", []
-    if getattr(session, "_chat", None) is None:
+        return "Kein Gemini-API-Key konfiguriert. Bitte in den Einstellungen eintragen.", []
+    if session._chat is None:
         session.start(api_key)
     return session.send(text)

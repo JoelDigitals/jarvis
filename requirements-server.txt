@@ -1,4 +1,4 @@
-# Render.com – nur plattformunabhängig, keine Windows-only Pakete
+# Server-only requirements (kein PyAudio, Qt, Windows-APIs)
 flask
 flask-cors
 gunicorn
@@ -7,7 +7,6 @@ requests
 beautifulsoup4
 duckduckgo-search
 youtube-transcript-api
-numpy
+pillow
 psutil
-pyperclip
-discord.py
+anthropic
