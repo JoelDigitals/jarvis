@@ -8,7 +8,41 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90' fill='%2300ccff'>J</text></svg>">
 </head>
 <body>
-<div id="app">
+
+<!-- ══ LOGIN / REGISTER SCREEN ══════════════════════════════════════════ -->
+<div id="auth-screen" class="auth-screen hidden">
+  <div class="auth-bg-grid"></div>
+  <div class="auth-card">
+    <div class="auth-logo">◆ JARVIS</div>
+    <div class="auth-sub">JOEL DIGITALS · KI-ASSISTENT</div>
+
+    <!-- Tab switcher -->
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-login" onclick="authTab('login')">Anmelden</button>
+      <button class="auth-tab" id="tab-register" onclick="authTab('register')">Registrieren</button>
+    </div>
+
+    <!-- Login form -->
+    <div id="form-login">
+      <input class="auth-input" type="text" id="login-user" placeholder="Benutzername" autocomplete="username">
+      <input class="auth-input" type="password" id="login-pass" placeholder="Passwort" autocomplete="current-password">
+      <button class="auth-btn" onclick="doLogin()">Einloggen</button>
+    </div>
+
+    <!-- Register form -->
+    <div id="form-register" class="hidden">
+      <input class="auth-input" type="text" id="reg-key" placeholder="Lizenzschlüssel (JARVIS-XXXXXXXX)">
+      <input class="auth-input" type="text" id="reg-user" placeholder="Benutzername (min. 3 Zeichen)" autocomplete="username">
+      <input class="auth-input" type="password" id="reg-pass" placeholder="Passwort (min. 6 Zeichen)" autocomplete="new-password">
+      <button class="auth-btn" onclick="doRegister()">Konto erstellen</button>
+    </div>
+
+    <div id="auth-msg" class="auth-msg"></div>
+  </div>
+</div>
+
+<!-- ══ MAIN APP ══════════════════════════════════════════════════════════ -->
+<div id="app" class="hidden">
   <!-- HEADER -->
   <header>
     <div class="h-left">
@@ -21,6 +55,7 @@
     </div>
     <div class="h-right">
       <div id="ap-label" class="ap-label"></div>
+      <span id="user-badge" class="user-badge" title="Abmelden" onclick="doLogout()"></span>
       <div class="h-clock">
         <div id="clock" class="clock-time">00:00</div>
         <div id="clock-date" class="clock-date"></div>
@@ -82,14 +117,11 @@
               </filter>
             </defs>
             <rect width="200" height="120" rx="20" fill="url(#glow)"/>
-            <!-- Eyes -->
             <ellipse cx="70" cy="45" rx="12" ry="10" fill="none" stroke="#00ccff" stroke-width="1.5" filter="url(#neon)"/>
             <ellipse cx="130" cy="45" rx="12" ry="10" fill="none" stroke="#00ccff" stroke-width="1.5" filter="url(#neon)"/>
             <circle cx="70" cy="45" r="4" fill="#00ccff" opacity=".8"/>
             <circle cx="130" cy="45" r="4" fill="#00ccff" opacity=".8"/>
-            <!-- Mouth -->
             <path d="M 65 75 Q 100 90 135 75" fill="none" stroke="#00ff88" stroke-width="1.5" filter="url(#neon)" id="mouth"/>
-            <!-- Ear-like sides -->
             <rect x="10" y="40" width="8" height="20" rx="4" fill="none" stroke="#00ccff" stroke-width="1" opacity=".4"/>
             <rect x="182" y="40" width="8" height="20" rx="4" fill="none" stroke="#00ccff" stroke-width="1" opacity=".4"/>
           </svg>
@@ -159,6 +191,17 @@
         <div id="s-sites-list"></div>
         <button class="btn sm" onclick="addSiteRow()">+ Seite</button>
         <button class="btn sm" onclick="saveSites()" style="margin-top:4px">Seiten speichern</button>
+      </section>
+      <!-- Admin: Lizenz-Verwaltung (nur sichtbar für Admin) -->
+      <section id="admin-section" class="hidden">
+        <h3>Admin — Lizenzen</h3>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+          <input type="text" id="s-lic-label" placeholder="Bezeichnung (optional)" style="flex:1;min-width:120px">
+          <input type="number" id="s-lic-uses" value="20" min="1" max="100" style="width:70px">
+          <button class="btn sm" onclick="adminCreateKey()">Schlüssel erstellen</button>
+        </div>
+        <div id="admin-keys-list" style="font-size:11px;max-height:200px;overflow-y:auto"></div>
+        <button class="btn sm" onclick="adminLoadKeys()" style="margin-top:4px">Aktualisieren</button>
       </section>
       <div id="settings-msg" class="msg-success hidden"></div>
     </div>

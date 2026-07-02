@@ -45,6 +45,10 @@
     "web_design_campaign_emails_opened": {
       "value": "0",
       "updated": "2026-06-18"
+    },
+    "gruenderwochen_active": {
+      "value": "true",
+      "updated": "2026-06-29"
     }
   },
   "relationships": {},

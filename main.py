@@ -2199,6 +2199,9 @@ class JarvisLive:
             http_options={"api_version": "v1beta"}
         )
 
+        _fail_streak = 0
+        _session_start = 0.0
+
         # Nur initial ausführen (kein Crash-Loop durch Setup)
         if not self._initialized:
             try:
@@ -2243,6 +2246,8 @@ class JarvisLive:
                     self._session_active = True
 
                     print("[JARVIS] ✅ Connected.")
+                    _fail_streak = 0
+                    _session_start = time.time()
                     self._safe_set_state("LISTENING")
                     self.ui.write_log("SYS: JARVIS bereit.")
 
@@ -2268,8 +2273,14 @@ class JarvisLive:
                 self.ui.hud.update()
             except Exception:
                 pass
-            print("[JARVIS] 🔄 Reconnecting in 10s...")
-            await asyncio.sleep(10)
+            # Exponential backoff: 10s → 20s → 40s → 80s → max 120s
+            # Wenn Session >30s lief → kein echter Crash-Loop, kurz warten
+            if time.time() - _session_start > 30:
+                _fail_streak = 0
+            _fail_streak += 1
+            wait = min(10 * (2 ** (_fail_streak - 1)), 120)
+            print(f"[JARVIS] 🔄 Reconnecting in {wait}s... (Versuch {_fail_streak})")
+            await asyncio.sleep(wait)
 
 def main():
     import argparse

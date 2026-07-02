@@ -2,9 +2,14 @@
 import json, os, sys, threading, time
 from pathlib import Path
 from collections import deque
-from flask import Flask, request, jsonify, render_template, send_from_directory, Response, stream_with_context
+from flask import Flask, request, jsonify, render_template, send_from_directory, Response, stream_with_context, make_response
 from flask_cors import CORS
 from server.autoupdate_api import autoupdate_bp
+from server.auth import (
+    create_user, verify_user, create_token, verify_token, revoke_token, get_role,
+    use_license_key, generate_license_key, list_license_keys, revoke_license_key,
+    require_login, require_admin_login,
+)
 
 BASE = Path(__file__).resolve().parent.parent
 STATIC = BASE / "server" / "static"
@@ -63,6 +68,7 @@ def health():
     return jsonify({"status": "ok"})
 
 @app.route("/api/chat", methods=["POST"])
+@require_login
 def chat():
     from server.handler import send_message
     data = request.get_json(force=True)
@@ -237,6 +243,96 @@ def stream():
                 if ev in SYNC_CLIENTS:
                     SYNC_CLIENTS.remove(ev)
     return Response(stream_with_context(gen()), mimetype="text/event-stream")
+
+# ── Auth / Lizenz Routen ──────────────────────────────────────────────────
+
+@app.route("/api/auth/register", methods=["POST"])
+def auth_register():
+    data = request.get_json(force=True) or {}
+    key     = (data.get("license_key") or "").strip()
+    username = (data.get("username") or "").strip()
+    password = (data.get("password") or "").strip()
+
+    if not key or not username or not password:
+        return jsonify({"error": "Lizenzschlüssel, Benutzername und Passwort erforderlich."}), 400
+    if len(username) < 3:
+        return jsonify({"error": "Benutzername muss mindestens 3 Zeichen haben."}), 400
+    if len(password) < 6:
+        return jsonify({"error": "Passwort muss mindestens 6 Zeichen haben."}), 400
+
+    ok, msg = use_license_key(key)
+    if not ok:
+        return jsonify({"error": msg}), 403
+
+    if not create_user(username, password):
+        return jsonify({"error": "Benutzername bereits vergeben."}), 409
+
+    token = create_token(username)
+    resp = make_response(jsonify({"ok": True, "token": token, "username": username, "role": "user"}))
+    resp.set_cookie("jarvis_token", token, max_age=30*24*3600, httponly=True, samesite="Lax")
+    return resp
+
+@app.route("/api/auth/login", methods=["POST"])
+def auth_login():
+    data = request.get_json(force=True) or {}
+    username = (data.get("username") or "").strip()
+    password = (data.get("password") or "").strip()
+    if not verify_user(username, password):
+        return jsonify({"error": "Ungültige Anmeldedaten."}), 401
+    token = create_token(username)
+    role = get_role(username)
+    resp = make_response(jsonify({"ok": True, "token": token, "username": username, "role": role}))
+    resp.set_cookie("jarvis_token", token, max_age=30*24*3600, httponly=True, samesite="Lax")
+    return resp
+
+@app.route("/api/auth/logout", methods=["POST"])
+def auth_logout():
+    token = request.headers.get("Authorization", "").replace("Bearer ", "") or request.cookies.get("jarvis_token", "")
+    revoke_token(token)
+    resp = make_response(jsonify({"ok": True}))
+    resp.delete_cookie("jarvis_token")
+    return resp
+
+@app.route("/api/auth/me", methods=["GET"])
+@require_login
+def auth_me():
+    return jsonify({"username": request.jarvis_user, "role": request.jarvis_role})
+
+# ── Admin: Lizenzen ───────────────────────────────────────────────────────
+
+@app.route("/api/admin/licenses", methods=["GET"])
+@require_admin_login
+def admin_list_licenses():
+    return jsonify(list_license_keys())
+
+@app.route("/api/admin/licenses", methods=["POST"])
+@require_admin_login
+def admin_create_license():
+    data = request.get_json(force=True) or {}
+    max_uses = int(data.get("max_uses", 20))
+    label    = (data.get("label") or "").strip()
+    key = generate_license_key(max_uses=max_uses, label=label)
+    return jsonify({"ok": True, "key": key, "max_uses": max_uses})
+
+@app.route("/api/admin/licenses/<key>", methods=["DELETE"])
+@require_admin_login
+def admin_revoke_license(key):
+    if revoke_license_key(key):
+        return jsonify({"ok": True})
+    return jsonify({"error": "Key nicht gefunden"}), 404
+
+@app.route("/api/admin/users", methods=["GET"])
+@require_admin_login
+def admin_list_users():
+    from server.auth import _users
+    users = _users()
+    result = [
+        {"username": u, "role": v.get("role", "user"), "created_at": v.get("created_at")}
+        for u, v in users.items()
+    ]
+    result.insert(0, {"username": "JoelDigitals", "role": "admin", "created_at": None})
+    return jsonify(result)
+
 
 def _get_api_key_any():
     import server.handler as h

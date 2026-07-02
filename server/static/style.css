@@ -282,3 +282,61 @@ footer{
 /* ── ANIMATIONS ── */
 @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 .log-line{animation:fadeIn .2s ease}
+
+/* ── AUTH SCREEN ── */
+.auth-screen{
+  position:fixed;inset:0;z-index:1000;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--dark);
+}
+.auth-bg-grid{
+  position:absolute;inset:0;
+  background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);
+  background-size:48px 48px;
+  opacity:.3;pointer-events:none;
+}
+.auth-card{
+  position:relative;z-index:1;
+  background:var(--panel);border:1px solid var(--border);border-radius:16px;
+  padding:36px 32px;width:100%;max-width:380px;
+  box-shadow:0 0 60px rgba(0,204,255,.08),0 4px 32px rgba(0,0,0,.6);
+  display:flex;flex-direction:column;gap:14px;
+}
+.auth-logo{
+  font-family:var(--mono);font-size:22px;font-weight:700;
+  color:var(--pri);letter-spacing:3px;text-align:center;
+  text-shadow:0 0 20px rgba(0,204,255,.5);
+}
+.auth-sub{font-size:10px;color:var(--text-dim);letter-spacing:1px;text-align:center;margin-top:-8px}
+.auth-tabs{display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.auth-tab{
+  flex:1;padding:8px;font-size:12px;font-family:var(--mono);
+  background:transparent;color:var(--text-dim);border:none;cursor:pointer;
+  transition:background .2s,color .2s;
+}
+.auth-tab.active{background:rgba(0,204,255,.12);color:var(--pri);}
+.auth-input{
+  width:100%;padding:10px 12px;
+  background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  color:var(--text);font-family:var(--mono);font-size:13px;
+  outline:none;transition:border-color .2s;
+}
+.auth-input:focus{border-color:var(--pri-dim);}
+.auth-btn{
+  width:100%;padding:11px;
+  background:linear-gradient(135deg,rgba(0,204,255,.2),rgba(136,68,255,.2));
+  border:1px solid var(--pri-dim);border-radius:8px;
+  color:var(--pri);font-family:var(--mono);font-size:13px;font-weight:600;
+  cursor:pointer;letter-spacing:1px;transition:background .2s,box-shadow .2s;
+}
+.auth-btn:hover{background:linear-gradient(135deg,rgba(0,204,255,.3),rgba(136,68,255,.3));box-shadow:0 0 20px rgba(0,204,255,.2);}
+.auth-msg{font-size:12px;text-align:center;min-height:18px;transition:color .2s;}
+.hidden{display:none!important}
+
+/* ── USER BADGE ── */
+.user-badge{
+  font-size:11px;color:var(--text-dim);cursor:pointer;
+  padding:3px 8px;border:1px solid var(--border);border-radius:20px;
+  transition:color .2s,border-color .2s;white-space:nowrap;
+}
+.user-badge:hover{color:var(--pri);border-color:var(--pri-dim);}
