@@ -128,6 +128,9 @@ STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
 }
+# Whitenoise bedient /static/ auch mit DEBUG=0 direkt aus den App-Verzeichnissen (Finders),
+# falls collectstatic (noch) nicht gelaufen ist – verhindert „Design fehlt" nach Deploys.
+WHITENOISE_USE_FINDERS = True
 
 # Eigene Einstellungen/Gedächtnis jedes Benutzers (außer dem Besitzer): userdata/<user_id>/config|memory|content
 JARVIS_USERDATA = Path(os.environ.get("JARVIS_USERDATA", BASE_DIR / "userdata"))

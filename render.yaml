@@ -6,7 +6,7 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements-server.txt && python manage.py collectstatic --noinput
-    startCommand: python manage.py migrate --noinput && python manage.py ensure_admin && daphne -b 0.0.0.0 -p $PORT jarvis_web.asgi:application
+    startCommand: python manage.py migrate --noinput && python manage.py collectstatic --noinput && python manage.py ensure_admin && daphne -b 0.0.0.0 -p $PORT jarvis_web.asgi:application
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
