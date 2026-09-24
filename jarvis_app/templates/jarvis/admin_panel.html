@@ -27,12 +27,11 @@
     <div class="panel-b">
       <form class="row" id="license-form" style="flex-wrap:wrap">
         <input type="text" id="lic-label" placeholder="Bezeichnung (optional)" style="max-width:260px">
-        <input type="number" id="lic-uses" value="20" min="1" style="max-width:110px" title="max. Aktivierungen">
         <button class="btn primary" type="submit">Schlüssel erzeugen</button>
         <span class="flash" id="lic-flash"></span>
       </form>
       <div class="table-wrap" style="margin-top:12px"><table>
-        <thead><tr><th>Schlüssel</th><th>Bezeichnung</th><th>Nutzung</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Schlüssel</th><th>Bezeichnung</th><th>Aktiviert von</th><th>Status</th><th></th></tr></thead>
         <tbody id="licenses"></tbody></table></div>
     </div>
   </section>
@@ -109,8 +108,8 @@
     $("licenses").innerHTML = keys.length ? "" : '<tr><td colspan="5" class="muted">Noch keine Schlüssel.</td></tr>';
     keys.forEach(k => {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td><code>${esc(k.key)}</code></td><td>${esc(k.label)}</td><td>${k.uses} / ${k.max_uses}</td>
-        <td>${k.active ? '<span class="pill"><span class="dot ok"></span>aktiv</span>' : '<span class="pill"><span class="dot bad"></span>widerrufen</span>'}</td>
+      tr.innerHTML = `<td><code>${esc(k.key)}</code></td><td>${esc(k.label)}</td><td>${esc(k.user || "—")}</td>
+        <td>${k.valid ? '<span class="pill"><span class="dot ok"></span>gültig</span>' : (k.active ? '<span class="pill"><span class="dot warn"></span>ungültig</span>' : '<span class="pill"><span class="dot bad"></span>widerrufen</span>')}</td>
         <td>${k.active ? '<button class="btn danger" style="padding:3px 8px">Widerrufen</button>' : ""}</td>`;
       const b = tr.querySelector(".danger");
       if (b) b.onclick = async () => { await J.api(`/api/admin/licenses/${encodeURIComponent(k.key)}`, { method: "DELETE" }); loadLicenses(); };
@@ -119,7 +118,7 @@
   }
   $("license-form").onsubmit = async (e) => {
     e.preventDefault();
-    const r = await J.api("/api/admin/licenses", { method: "POST", body: { label: $("lic-label").value, max_uses: $("lic-uses").value } });
+    const r = await J.api("/api/admin/licenses", { method: "POST", body: { label: $("lic-label").value } });
     flash($("lic-flash"), "Erzeugt: " + r.key);
     navigator.clipboard && navigator.clipboard.writeText(r.key).catch(() => {});
     loadLicenses();

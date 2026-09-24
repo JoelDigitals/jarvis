@@ -31,6 +31,18 @@ def kb_set(category: str, key: str, value: str) -> str:
         _save(data)
     return f"Wissen gespeichert: {category} → {key}"
 
+def _fuzzy_find(data: dict, key: str) -> list[tuple[str, str, dict]]:
+    """Findet Einträge, deren Schlüssel den Begriff als Teil enthält (Fuzzy-Match)."""
+    k = key.lower().replace("_", "")
+    hits = []
+    for cat, entries in data.items():
+        for name, entry in entries.items():
+            norm = name.lower().replace("_", "")
+            if k in norm or norm in k:
+                hits.append((cat, name, entry))
+    return hits
+
+
 def kb_get(category: str = "", key: str = "") -> str:
     data = _load()
     if not data:
@@ -41,6 +53,18 @@ def kb_get(category: str = "", key: str = "") -> str:
             entry = cat.get(key)
             if entry:
                 return f"{category} → {key}: {entry['value']} (seit {entry['updated']})"
+            # Fuzzy-Fallback: auch description/finden, wenn z.B. 'joel_digitals_description' gesucht wird
+            hits = _fuzzy_find(data, key)
+            if not hits and category in data:
+                hits = [(category, k, v) for k, v in data[category].items()
+                        if k.lower() in key.lower() or key.lower() in k.lower()]
+            if hits:
+                lines = [f"{c} → {n}: {e['value']} (seit {e['updated']})" for c, n, e in hits[:4]]
+                return "\n".join(lines)
+            # Letzter Ausweg: Kategorie komplett ausgeben, damit die KI etwas Brauchbares bekommt
+            if cat:
+                lines = [f"{k}: {v['value']}" for k, v in cat.items()]
+                return f"Schlüssel '{key}' nicht gefunden. {category}: " + " | ".join(lines)
             return f"Schlüssel '{key}' nicht in '{category}' gefunden."
         if cat:
             lines = [f"{k}: {v['value']}" for k, v in cat.items()]

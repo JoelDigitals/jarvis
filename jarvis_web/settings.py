@@ -154,7 +154,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ── JARVIS ──
 JARVIS_TEXT_MODEL = os.environ.get("JARVIS_TEXT_MODEL", "gemini-2.5-flash")
-JARVIS_LIVE_MODEL = os.environ.get("JARVIS_LIVE_MODEL", "models/gemini-3.1-flash-live-preview")
+# 3.1-live stirbt auf Render regelmäßig mit 1008 ("The operation was aborted");
+# das 2.5-native-audio-Modell ist stabil. Bei Bedarf per Umgebungsvariable überschreiben.
+JARVIS_LIVE_MODEL = os.environ.get("JARVIS_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview-12-2025")
 JARVIS_VOICE = os.environ.get("JARVIS_VOICE", "Charon")
 # Hintergrund-Jobs (Tagesbericht, E-Mail-Scan, Erinnerungen, Wecker). Nur in EINER Instanz aktiv lassen.
 JARVIS_BACKGROUND_JOBS = _env_bool("JARVIS_BACKGROUND_JOBS", True)

@@ -268,17 +268,39 @@ class LiveConsumer(AsyncWebsocketConsumer):
                                                config=self._build_config(system, decls)) as session:
                 self.session = session
                 await self._json(type="state", state="LISTENING", wake_mode=self.wake_mode)
+                self._retries = 0  # Verbindung stand → Zähler zurücksetzen
                 await self._receive_loop()
         except asyncio.CancelledError:
             pass
         except Exception as e:
             log.warning("[Live] Sitzung beendet: %s", e)
-            traceback.print_exc()
-            await self._json(type="error", message=f"Sprachsitzung beendet: {e}")
+            msg = str(e)
+            if "exhausted" in msg.lower() or "429" in msg or "quota" in msg.lower():
+                # Gemini-Limits: Free-Tier erlaubt z. B. nur 3 gleichzeitige Live-Sessions
+                await self._json(type="error", message=(
+                    "Gemini-Sprachlimit erreicht (gleichzeitige Live-Sitzungen/Quota). "
+                    "Warte etwa eine Minute und starte den Sprachmodus neu. "
+                    "Der Text-Chat funktioniert weiterhin."))
+            else:
+                await self._json(type="error", message=f"Sprachsitzung beendet: {e}")
+            if not self.closing:
+                # Bekanntes Problem bei Live-Preview-Modellen (1008 „The operation was aborted“):
+                # Sitzung nach kurzer Pause automatisch neu aufbauen (max. 5 Versuche in Folge).
+                self._retries = min(getattr(self, "_retries", 0) + 1, 6)
+                if self._retries <= 5:
+                    asyncio.get_event_loop().call_later(
+                        2.0 * self._retries, lambda: asyncio.ensure_future(self._auto_restart()))
         finally:
             self.session = None
             if not self.closing:
                 await self._json(type="state", state="OFF")
+
+    async def _auto_restart(self):
+        """Baut die Gemini-Live-Sitzung automatisch wieder auf, solange der Tab offen bleibt."""
+        if self.closing or (self.live_task and not self.live_task.done()):
+            return
+        log.info("[Live] Automatischer Neustart der Sprachsitzung (Versuch %d)", getattr(self, "_retries", 1))
+        self.live_task = asyncio.create_task(self._run_live())
 
     def _is_addressed(self) -> bool:
         if not self.wake_mode:

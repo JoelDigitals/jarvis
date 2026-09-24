@@ -152,11 +152,11 @@ def _register(key: str, username: str, password: str) -> str | None:
             return "Ungültiger Lizenzschlüssel."
         if not lk.active:
             return "Dieser Schlüssel wurde deaktiviert."
-        if lk.uses >= lk.max_uses:
-            return "Lizenzschlüssel aufgebraucht (max. Aktivierungen erreicht)."
-        lk.uses += 1
-        lk.save(update_fields=["uses"])
-        User.objects.create_user(username=username, password=password)
+        if lk.user:
+            return "Dieser Schlüssel wurde bereits aktiviert."
+        lk.user = User.objects.create_user(username=username, password=password)
+        lk.activated_at = timezone.now()
+        lk.save(update_fields=["user", "activated_at"])
     return None
 
 
@@ -565,12 +565,11 @@ def api_memory(request):
 def api_admin_licenses(request):
     if request.method == "POST":
         data = _body(request)
-        lk = LicenseKey.objects.create(key=LicenseKey.generate_key(), label=str(data.get("label") or "")[:120],
-                                       max_uses=max(1, int(data.get("max_uses") or 20)))
-        return JsonResponse({"ok": True, "key": lk.key, "max_uses": lk.max_uses})
+        lk = LicenseKey.objects.create(key=LicenseKey.generate_key(), label=str(data.get("label") or "")[:120])
+        return JsonResponse({"ok": True, "key": lk.key})
     return JsonResponse([
-        {"key": k.key, "label": k.label, "uses": k.uses, "max_uses": k.max_uses, "active": k.active,
-         "created_at": k.created_at.isoformat()} for k in LicenseKey.objects.order_by("-created_at")
+        {"key": k.key, "label": k.label, "user": k.user.username if k.user else None, "valid": k.is_valid,
+         "active": k.active, "created_at": k.created_at.isoformat()} for k in LicenseKey.objects.order_by("-created_at")
     ], safe=False)
 
 

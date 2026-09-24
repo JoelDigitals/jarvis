@@ -15,8 +15,14 @@ API_CONFIG_PATH = DataPath("config") / "api_keys.json"
 
 
 def _get_api_key() -> str:
-    with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)["gemini_api_key"]
+    try:
+        with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
+            return json.load(f).get("gemini_api_key", "")
+    except (OSError, ValueError):
+        pass
+    # Fallback: direkte Umgebungsvariable (Render)
+    import os
+    return os.environ.get("GEMINI_API_KEY", "")
 
 
 def _gemini_search(query: str) -> str:
@@ -30,9 +36,12 @@ def _gemini_search(query: str) -> str:
     )
 
     text = ""
-    for part in response.candidates[0].content.parts:
-        if hasattr(part, "text") and part.text:
-            text += part.text
+    try:
+        for part in response.candidates[0].content.parts:
+            if hasattr(part, "text") and part.text:
+                text += part.text
+    except (AttributeError, IndexError, TypeError):
+        pass
 
     text = text.strip()
     if not text:
@@ -117,6 +126,15 @@ def web_search(
         player.write_log(f"[Search] {query or ', '.join(items)}")
 
     print(f"[WebSearch] 🔍 Query: {query!r}  Mode: {mode}")
+    # Erst Gemini mit Google-Search-Grounding (funktioniert auch, wenn DDG blockiert/ratelimited ist),
+    # dann DDG als Fallback.
+    try:
+        if _get_api_key():
+            result = _gemini_search(query)
+            print("[WebSearch] ✅ Gemini grounding.")
+            return result
+    except Exception as e:
+        print(f"[WebSearch] ⚠️ Gemini grounding failed: {e}")
     try:
         results = _ddg_search(query)
         result  = _format_ddg(query, results)
