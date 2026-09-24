@@ -1,4 +1,5 @@
 #computer_control.py
+from jarvis_core.paths import DataPath
 import io
 import json
 import re
@@ -30,8 +31,8 @@ def _base_dir() -> Path:
 
 
 _BASE         = _base_dir()
-_CONFIG_PATH  = _BASE / "config" / "api_keys.json"
-_MEMORY_PATH  = _BASE / "memory" / "long_term.json"
+_CONFIG_PATH  = DataPath("config") / "api_keys.json"
+_MEMORY_PATH  = DataPath("memory") / "long_term.json"
 
 def _load_config() -> dict:
     try:

@@ -1,3 +1,4 @@
+from jarvis_core.paths import DataPath
 import json, threading
 from pathlib import Path
 import sys
@@ -27,7 +28,7 @@ def _call_with_timeout(fn, timeout=6):
 
 def _get_home_location() -> str:
     try:
-        p = _base_dir() / "config" / "settings.json"
+        p = DataPath("config") / "settings.json"
         if p.exists():
             return json.loads(p.read_text(encoding="utf-8")).get("home_location", "")
     except:
@@ -164,7 +165,7 @@ def _get_jds_finance() -> dict:
 
 def _get_user_name() -> str:
     try:
-        p = _base_dir() / "config" / "settings.json"
+        p = DataPath("config") / "settings.json"
         if p.exists():
             return json.loads(p.read_text(encoding="utf-8")).get("user_name", "Sir")
     except:

@@ -1,3 +1,4 @@
+from jarvis_core.paths import DataPath
 import requests
 from datetime import datetime
 
@@ -106,7 +107,7 @@ def _day_name(date_str: str) -> str:
 def _get_home_location() -> str:
     try:
         import json, os, sys
-        p = Path(__file__).resolve().parent.parent / "config" / "settings.json"
+        p = DataPath("config") / "settings.json"
         if p.exists():
             return json.loads(p.read_text(encoding="utf-8")).get("home_location", "")
     except:

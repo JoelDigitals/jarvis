@@ -1,13 +1,39 @@
+# JARVIS Web-App (Django + Channels/Daphne) auf Render
+# Wichtig: genau EINE Instanz – Sprachsitzungen, Desktop-Agent und Scheduler leben im Prozess.
 services:
   - type: web
     name: jarvis
     runtime: python
-    buildCommand: pip install -r requirements-server.txt
-    startCommand: gunicorn wsgi:application --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120
+    plan: free
+    buildCommand: pip install -r requirements-server.txt && python manage.py collectstatic --noinput
+    startCommand: python manage.py migrate --noinput && python manage.py ensure_admin && daphne -b 0.0.0.0 -p $PORT jarvis_web.asgi:application
+    healthCheckPath: /health
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: jarvis-db
+          property: connectionString
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "0"
+      - key: JARVIS_ADMIN_USER
+        value: JoelDigitals
+      - key: JARVIS_ADMIN_PASSWORD
+        sync: false
       - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: TANKERKOENIG_API_KEY
         sync: false
       - key: ADMIN_API_SECRET
         sync: false
-      - key: PYTHON_VERSION
-        value: "3.11"
+
+databases:
+  - name: jarvis-db
+    plan: free

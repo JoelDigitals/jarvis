@@ -1,4 +1,5 @@
 #youtube_video.py
+from jarvis_core.paths import DataPath
 import json
 import re
 import sys
@@ -9,8 +10,12 @@ from pathlib import Path
 from datetime import datetime
 from urllib.parse import quote_plus
 
-import pyautogui
-import numpy as np
+try:  # Desktop-only, auf dem Web-Server nicht verfügbar
+    import pyautogui
+    import numpy as np
+except Exception:
+    pyautogui = None
+    np = None
 
 try:
     import requests
@@ -34,7 +39,7 @@ def _get_base_dir() -> Path:
 
 
 BASE_DIR        = _get_base_dir()
-API_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
+API_CONFIG_PATH = DataPath("config") / "api_keys.json"
 
 HEADERS = {
     "User-Agent": (

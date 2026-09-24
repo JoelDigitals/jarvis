@@ -1,10 +1,11 @@
+from jarvis_core.paths import DataPath
 import json, os, sys, time
 from pathlib import Path
 from urllib.request import urlopen, Request
 from urllib.parse import urlencode
 
 BASE = Path(__file__).resolve().parent.parent
-CFG_PATH = BASE / "config" / "api_keys.json"
+CFG_PATH = DataPath("config") / "api_keys.json"
 
 API_URL = "https://creativecommons.tankerkoenig.de/json"
 

@@ -1,4 +1,5 @@
 #web_search.py
+from jarvis_core.paths import DataPath
 import json
 import sys
 from pathlib import Path
@@ -10,7 +11,7 @@ def _get_base_dir() -> Path:
 
 
 BASE_DIR        = _get_base_dir()
-API_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
+API_CONFIG_PATH = DataPath("config") / "api_keys.json"
 
 
 def _get_api_key() -> str:

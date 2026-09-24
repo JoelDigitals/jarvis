@@ -1,6 +1,10 @@
-flask
-flask-cors
-gunicorn
+# Desktop-JARVIS + lokale Django-Web-App
+Django>=5.1,<6
+channels>=4.1
+daphne>=4.1
+whitenoise>=6.7
+dj-database-url>=2.2
+websockets>=12
 google-genai
 google-generativeai
 requests

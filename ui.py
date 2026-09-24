@@ -2117,10 +2117,18 @@ class WebSync:
         try:
             import urllib.request
             body = json.dumps({"log": log} if log else {"state": state}).encode()
+            headers = {"Content-Type": "application/json"}
+            try:
+                from config.settings import load as _load_settings
+                secret = _load_settings().get("admin_api_secret", "")
+                if secret:
+                    headers["X-Admin-Secret"] = secret
+            except Exception:
+                pass
             req = urllib.request.Request(
                 f"{self._url}/api/push",
                 data=body,
-                headers={"Content-Type": "application/json"},
+                headers=headers,
                 method="POST",
             )
             urllib.request.urlopen(req, timeout=3)

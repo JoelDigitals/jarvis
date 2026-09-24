@@ -1,9 +1,10 @@
 """Projekt-Watcher – überwacht konfigurierte Ordner selbstständig auf Fehler."""
+from jarvis_core.paths import DataPath
 import json, re, py_compile, time
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent
-CONFIG_DIR = BASE / "config"
+CONFIG_DIR = DataPath("config")
 WATCH_FILE = CONFIG_DIR / "watched_projects.json"
 
 _SKIP_DIRS = {".git", "node_modules", "venv", ".venv", "__pycache__", "dist", "build"}

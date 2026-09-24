@@ -1,9 +1,10 @@
+from jarvis_core.paths import DataPath
 import json, os, time, subprocess, threading
 from pathlib import Path
 
 _BASE = Path(__file__).resolve().parent.parent
-_CONFIG_DIR = _BASE / "config"
-_CONTENT_DIR = _BASE / "content" / "social"
+_CONFIG_DIR = DataPath("config")
+_CONTENT_DIR = DataPath("content") / "social"
 _CONTENT_DIR.mkdir(parents=True, exist_ok=True)
 
 _PLATFORMS = {"instagram", "tiktok", "twitter", "linkedin", "youtube", "facebook"}

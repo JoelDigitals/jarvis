@@ -1,3 +1,4 @@
+from jarvis_core.paths import DataPath
 import json, os, sys, threading, time
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -7,8 +8,8 @@ def _base_dir() -> Path:
         return Path(sys.executable).parent
     return Path(__file__).resolve().parent.parent
 
-MUSIC_DIR = _base_dir() / "music"
-ALARM_FILE = _base_dir() / "config" / "alarm.json"
+MUSIC_DIR = DataPath("music")
+ALARM_FILE = DataPath("config") / "alarm.json"
 
 def _load_alarms() -> list:
     try:

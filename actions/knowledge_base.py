@@ -1,3 +1,4 @@
+from jarvis_core.paths import DataPath
 import json, threading, time
 from pathlib import Path
 import sys
@@ -7,7 +8,7 @@ def _base_dir() -> Path:
         return Path(sys.executable).parent
     return Path(__file__).resolve().parent.parent
 
-KB_PATH = _base_dir() / "memory" / "knowledge_base.json"
+KB_PATH = DataPath("memory") / "knowledge_base.json"
 _lock = threading.Lock()
 
 def _load() -> dict:

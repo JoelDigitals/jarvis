@@ -1,3 +1,4 @@
+from jarvis_core.paths import DataPath
 import re
 import json
 import sys
@@ -21,7 +22,7 @@ def _base_dir() -> Path:
         return Path(sys.executable).parent
     return Path(__file__).resolve().parent.parent
 
-API_CONFIG_PATH = _base_dir() / "config" / "api_keys.json"
+API_CONFIG_PATH = DataPath("config") / "api_keys.json"
 
 def _get_api_key() -> str:
     with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:

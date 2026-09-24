@@ -1,3 +1,4 @@
+from jarvis_core.paths import DataPath
 import json
 import sys
 import time
@@ -16,7 +17,7 @@ def _base_dir() -> Path:
         return Path(sys.executable).parent
     return Path(__file__).resolve().parent.parent
 
-JDS_CONFIG_PATH = _base_dir() / "config" / "jds_config.json"
+JDS_CONFIG_PATH = DataPath("config") / "jds_config.json"
 
 MESZ = timezone(timedelta(hours=2))  # UTC+2
 
@@ -581,7 +582,30 @@ class JDSClient:
         return "Seit Ihrer Abwesenheit: " + ", ".join(parts) + "."
 
 
-_client = JDSClient()
+class _ClientPerDataRoot:
+    """Ein JDSClient pro Datenverzeichnis (Web-App: pro Benutzer, Desktop: genau einer)."""
+
+    def __init__(self):
+        self._clients: dict[str, JDSClient] = {}
+
+    def _current(self) -> JDSClient:
+        from jarvis_core.paths import data_root
+        key = str(data_root())
+        if key not in self._clients:
+            self._clients[key] = JDSClient()
+        return self._clients[key]
+
+    def __getattr__(self, name):
+        return getattr(self._current(), name)
+
+    def __setattr__(self, name, value):
+        if name == "_clients":
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self._current(), name, value)
+
+
+_client = _ClientPerDataRoot()
 
 
 def jds_connect(parameters: dict, player=None) -> str:

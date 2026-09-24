@@ -1,3 +1,4 @@
+from jarvis_core.paths import DataPath
 import json
 import sys
 from pathlib import Path
@@ -10,7 +11,7 @@ def get_base_dir() -> Path:
 
 
 BASE_DIR    = get_base_dir()
-CONFIG_DIR  = BASE_DIR / "config"
+CONFIG_DIR  = DataPath("config")
 CONFIG_FILE = CONFIG_DIR / "api_keys.json"
 
 

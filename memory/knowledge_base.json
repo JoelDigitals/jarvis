@@ -11,12 +11,20 @@
     "bluetooth_preference": {
       "value": "wants phone paired for music, but prioritize and switch to MacBook immediately when MacBook is active",
       "updated": "2026-06-16 21:36"
+    },
+    "last_drink_reminder_received": {
+      "value": "2026-07-31 12:16 PM UTC",
+      "updated": "2026-07-31 14:16"
     }
   },
   "company": {
     "description": {
       "value": "Digital agency from Saarland, specializing in websites, web design, web development, and AI development (creator of JARVIS)",
       "updated": "2026-06-09 16:43"
+    },
+    "welle_suedwest_origin": {
+      "value": "Founded spontaneously, part of Joel Digitals, plans for YouTube TV channel extension. Website: welle-sued-west.onrender.com. Feature: Listener hotline for greetings/requests.",
+      "updated": "2026-07-31 15:16"
     }
   },
   "customers": {

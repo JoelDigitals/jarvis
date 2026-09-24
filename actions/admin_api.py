@@ -1,3 +1,4 @@
+from jarvis_core.paths import DataPath
 import json, os, sys
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
@@ -37,7 +38,7 @@ def _base_dir() -> Path:
 
 def _get_secret() -> str:
     try:
-        p = _base_dir() / "config" / "settings.json"
+        p = DataPath("config") / "settings.json"
         if p.exists():
             val = json.loads(p.read_text(encoding="utf-8")).get("admin_api_secret", "")
             if val:

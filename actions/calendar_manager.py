@@ -1,9 +1,10 @@
+from jarvis_core.paths import DataPath
 import datetime, json, os, pickle, sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-CREDENTIALS_FILE = BASE_DIR / "config" / "google_calendar_credentials.json"
-TOKEN_FILE = BASE_DIR / "config" / "google_calendar_token.pickle"
+CREDENTIALS_FILE = DataPath("config") / "google_calendar_credentials.json"
+TOKEN_FILE = DataPath("config") / "google_calendar_token.pickle"
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 

@@ -1,8 +1,9 @@
+from jarvis_core.paths import DataPath
 import json, os, re, subprocess, time
 from pathlib import Path
 
 _BASE = Path(__file__).resolve().parent.parent
-_CONFIG_DIR = _BASE / "config"
+_CONFIG_DIR = DataPath("config")
 _API_FILE = _CONFIG_DIR / "api_keys.json"
 
 _SKIP_DIRS = {".git", "node_modules", "venv", ".venv", "__pycache__", "dist", "build", ".idea", ".vscode"}

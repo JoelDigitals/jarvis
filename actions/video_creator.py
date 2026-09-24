@@ -1,8 +1,9 @@
+from jarvis_core.paths import DataPath
 import json, os, time, subprocess, tempfile, shutil, uuid
 from pathlib import Path
 
 _BASE = Path(__file__).resolve().parent.parent
-_OUTPUT_DIR = _BASE / "content" / "videos"
+_OUTPUT_DIR = DataPath("content") / "videos"
 _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 def _check_ffmpeg() -> bool:

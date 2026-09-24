@@ -27,3 +27,11 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Django Web-App
+db.sqlite3
+media/
+staticfiles/
+config/.django_secret
+config/agent.json
+userdata/

@@ -1,9 +1,10 @@
+from jarvis_core.paths import DataPath
 import asyncio, json, threading, time
 from pathlib import Path
 
 import discord
 
-CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "settings.json"
+CONFIG_PATH = DataPath("config") / "settings.json"
 
 
 class DiscordBridge:

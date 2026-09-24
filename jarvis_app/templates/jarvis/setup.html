@@ -1,0 +1,24 @@
+{% extends "jarvis/base.html" %}
+{% block title %}Ersteinrichtung · JARVIS{% endblock %}
+{% block body %}
+<div class="auth-wrap">
+  <div class="auth">
+    <div class="brand"><span class="logo"></span>J.A.R.V.I.S</div>
+    <div class="panel">
+      <div class="panel-h">Ersteinrichtung <span class="sub">Admin-Account</span></div>
+      <div class="panel-b">
+        <p class="muted" style="margin-bottom:6px">Es gibt noch keinen Benutzer. Lege den Besitzer-Account an – er hat vollen Zugriff auf alle Funktionen.</p>
+        {% if error %}<div class="error-box">{{ error }}</div>{% endif %}
+        <form method="post">
+          {% csrf_token %}
+          <label for="username">Benutzername</label>
+          <input type="text" id="username" name="username" required autofocus autocomplete="username">
+          <label for="password">Passwort (min. 8 Zeichen)</label>
+          <input type="password" id="password" name="password" required autocomplete="new-password">
+          <button class="btn primary" type="submit">Admin anlegen</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

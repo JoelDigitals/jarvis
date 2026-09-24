@@ -1,0 +1,52 @@
+{% load static %}<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05090d">
+<title>{% block title %}JARVIS{% endblock %}</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='none' stroke='%2300ccff' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%2300ccff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'jarvis/jarvis.css' %}">
+{% block head %}{% endblock %}
+</head>
+<body class="{% block bodyclass %}{% endblock %}">
+{% if user.is_authenticated and not hide_topbar %}
+<header class="topbar">
+  <a class="brand" href="/" style="text-decoration:none"><span class="logo"></span>J.A.R.V.I.S <small>v{{ version }}</small></a>
+  <div class="spacer"></div>
+  <span class="clock" id="clock"></span>
+  <nav class="nav row">
+    <a href="/" class="hide-m {% if request.path == '/' %}active{% endif %}">Konsole</a>
+    <a href="/settings/" class="{% if request.path == '/settings/' %}active{% endif %}">Einstellungen</a>
+    {% if user.is_superuser %}<a href="/admin-panel/" class="hide-m {% if request.path == '/admin-panel/' %}active{% endif %}">Admin</a>{% endif %}
+    <a href="/logout/" title="Abmelden">⏻</a>
+  </nav>
+</header>
+{% endif %}
+{% block body %}{% endblock %}
+<script>
+  window.JARVIS = window.JARVIS || {};
+  JARVIS.csrf = () => (document.cookie.match(/(?:^|; )csrftoken=([^;]+)/) || [])[1] || "";
+  JARVIS.api = async (url, opts = {}) => {
+    const o = { method: "GET", credentials: "same-origin", ...opts, headers: { ...(opts.headers || {}) } };
+    if (o.body && !(o.body instanceof FormData)) { o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(o.body); }
+    if (o.method !== "GET") o.headers["X-CSRFToken"] = JARVIS.csrf();
+    const r = await fetch(url, o);
+    let data = null;
+    try { data = await r.json(); } catch (e) { data = null; }
+    if (!r.ok) throw new Error((data && data.error) || `HTTP ${r.status}`);
+    return data;
+  };
+  JARVIS.esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  (function tick() {
+    const el = document.getElementById("clock");
+    if (el) el.textContent = new Date().toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    setTimeout(tick, 1000);
+  })();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

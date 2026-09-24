@@ -1,8 +1,10 @@
 import json, os, sys
 from pathlib import Path
 
+from jarvis_core.paths import DataPath
+
 BASE = Path(__file__).resolve().parent
-SETTINGS_PATH = BASE / "settings.json"
+SETTINGS_PATH = DataPath("config", "settings.json")
 
 DEFAULT = {
     "user_name": "Sir",

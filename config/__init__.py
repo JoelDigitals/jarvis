@@ -1,7 +1,9 @@
 import json, os
 from pathlib import Path
 
-_CONFIG_PATH = Path(__file__).parent / "api_keys.json"
+from jarvis_core.paths import DataPath
+
+_CONFIG_PATH = DataPath("config", "api_keys.json")
 
 def get_config() -> dict:
     with open(_CONFIG_PATH, "r", encoding="utf-8") as f:

@@ -1,12 +1,29 @@
-# Server-only requirements (kein PyAudio, Qt, Windows-APIs)
-flask
-flask-cors
-gunicorn
-google-genai
+# JARVIS Web-App (Django) – Server-Abhängigkeiten, ohne Desktop-Pakete (PyAudio, Qt, Windows-APIs)
+Django>=5.1,<6
+channels>=4.1
+daphne>=4.1
+whitenoise>=6.7
+dj-database-url>=2.2
+psycopg2-binary>=2.9
+
+# KI
+google-genai>=1.20
+google-generativeai
+anthropic
+
+# Actions
 requests
 beautifulsoup4
 duckduckgo-search
 youtube-transcript-api
 pillow
 psutil
-anthropic
+pdfplumber
+python-docx
+pandas
+openpyxl
+pydub
+pymysql
+discord.py
+google-api-python-client
+google-auth-oauthlib

@@ -6,8 +6,6 @@ BASE = Path(SPECPATH)
 
 datas = [
     (str(BASE / "core" / "prompt.txt"), "core"),
-    (str(BASE / "server" / "templates"), "server/templates"),
-    (str(BASE / "server" / "static"), "server/static"),
 ]
 if (BASE / "face.png").exists():
     datas.append((str(BASE / "face.png"), "."))

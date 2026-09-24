@@ -1,3 +1,4 @@
+from jarvis_core.paths import DataPath
 import json
 from pathlib import Path
 import sys
@@ -7,7 +8,7 @@ def _base_dir() -> Path:
         return Path(sys.executable).parent
     return Path(__file__).resolve().parent.parent
 
-SETTINGS_PATH = _base_dir() / "config" / "settings.json"
+SETTINGS_PATH = DataPath("config") / "settings.json"
 
 # reuse the singleton browser thread from browser_control
 from actions.browser_control import _bt, _ensure_started

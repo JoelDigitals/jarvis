@@ -1,3 +1,4 @@
+from jarvis_core.paths import DataPath
 import json
 import sys
 import time
@@ -18,7 +19,7 @@ def _get_base_dir() -> Path:
 
 
 BASE_DIR     = _get_base_dir()
-API_KEY_PATH = BASE_DIR / "config" / "api_keys.json"
+API_KEY_PATH = DataPath("config") / "api_keys.json"
 
 def _load_api_key() -> str:
     try:
@@ -82,8 +83,16 @@ _rate_limited: dict[str, float] = {}
 class OpenRouterClient:
 
     def __init__(self) -> None:
-        self.api_key  = _load_api_key()
-        self._headers = {
+        pass
+
+    # Key bei jedem Aufruf lesen: in der Web-App hat jeder Benutzer seine eigene api_keys.json
+    @property
+    def api_key(self) -> str:
+        return _load_api_key()
+
+    @property
+    def _headers(self) -> dict:
+        return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type":  "application/json",
             "HTTP-Referer":  "https://github.com/mark-xxv",

@@ -1,8 +1,9 @@
+from jarvis_core.paths import DataPath
 import json, os, sys, threading
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent
-CFG_PATH = BASE / "config" / "db_config.json"
+CFG_PATH = DataPath("config") / "db_config.json"
 
 _connections = {}
 _lock = threading.Lock()

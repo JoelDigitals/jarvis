@@ -1,8 +1,9 @@
+from jarvis_core.paths import DataPath
 import json, os, sys, threading, time, subprocess, platform, shutil, tempfile
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-CONFIG_DIR = BASE_DIR / "config"
+CONFIG_DIR = DataPath("config")
 WAKE_CONFIG_FILE = CONFIG_DIR / "wake_config.json"
 
 _DEFAULT_CONFIG = {

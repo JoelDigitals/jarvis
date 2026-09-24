@@ -1,0 +1,321 @@
+{% extends "jarvis/base.html" %}
+{% block title %}Einstellungen · JARVIS{% endblock %}
+{% block body %}
+<div class="page">
+  <h1>EINSTELLUNGEN</h1>
+  <p class="lead">Konfiguration für JARVIS – dieselben Werte wie in der Desktop-Version (config/settings.json).</p>
+
+  <div class="tabs" id="tabs">
+    <button data-tab="account" class="active">Account</button>
+    {% if full_access %}
+    <button data-tab="agent">Desktop-Agent</button>
+    <button data-tab="general">Allgemein</button>
+    <button data-tab="keys">API-Keys</button>
+    <button data-tab="email">E-Mail</button>
+    <button data-tab="jds">JDS &amp; Admin-API</button>
+    <button data-tab="sites">Wissens-Seiten</button>
+    <button data-tab="report">Tagesbericht</button>
+    <button data-tab="discord">Discord</button>
+    <button data-tab="memory">Gedächtnis</button>
+    {% endif %}
+  </div>
+
+  <!-- Account -->
+  <section class="panel section" data-pane="account">
+    <div class="panel-h">Account <span class="sub">{{ user.username }}{% if user.is_superuser %} · Admin{% elif full_access %} · Vollzugriff{% endif %}</span></div>
+    <div class="panel-b">
+      <label class="switch">Antworten im Text-Chat vorlesen <input type="checkbox" id="p-tts" {% if profile.tts_enabled %}checked{% endif %}></label>
+      <label class="switch">Wake-Word-Modus im Sprachmodus („Jarvis …“) <input type="checkbox" id="p-wake" {% if profile.wake_word_mode %}checked{% endif %}></label>
+      <label class="switch">Stündliche Trink-Erinnerung (7–22 Uhr) <input type="checkbox" id="p-hydration" {% if profile.hydration_reminder %}checked{% endif %}></label>
+      <div class="subcard">
+        <label>Passwort ändern</label>
+        <div class="grid2">
+          <div><label for="pw-old">Aktuelles Passwort</label><input type="password" id="pw-old" autocomplete="current-password"></div>
+          <div><label for="pw-new">Neues Passwort</label><input type="password" id="pw-new" autocomplete="new-password"></div>
+        </div>
+        <div class="save-row"><button class="btn" id="pw-save">Passwort ändern</button><span class="flash" id="pw-flash"></span></div>
+      </div>
+      <div class="save-row"><button class="btn danger" id="chat-reset">Chatverlauf löschen</button><span class="flash" id="reset-flash"></span></div>
+    </div>
+  </section>
+
+  {% if full_access %}
+  <!-- Desktop-Agent -->
+  <section class="panel section hidden" data-pane="agent">
+    <div class="panel-h">Desktop-Agent <span class="sub" id="agent-status">…</span></div>
+    <div class="panel-b">
+      <p>Der Desktop-Agent verbindet deinen PC mit dieser Web-App. Dann funktionieren auch online alle PC-Funktionen:
+        Apps öffnen, Lautstärke/Helligkeit, Tastatur &amp; Maus, Dateien am PC, Browser-Automation, Nachrichten (WhatsApp/Telegram),
+        Code- und Dev-Agent, Steam-Updates, Projekt-Überwachung und Bildschirmfotos.</p>
+      <label>Einmalig auf dem PC im JARVIS-Ordner ausführen</label>
+      <div class="codebox" id="agent-cmd">python desktop_agent.py --server {{ server_url }} --token {{ profile.api_token }} --save</div>
+      <p class="hint">Mit <code>--save</code> merkt sich der Agent Server und Token (config/agent.json). Danach genügt <code>python desktop_agent.py</code>.
+        Mit <code>--push-config</code> werden deine lokalen Einstellungen, Gedächtnis, Wissensdatenbank und der Google-Kalender-Token auf den Server übertragen.</p>
+      <div class="save-row">
+        <button class="btn" id="copy-cmd">Befehl kopieren</button>
+        <button class="btn danger" id="regen-token">Neues Token erzeugen</button>
+        <span class="flash" id="agent-flash"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Allgemein -->
+  <section class="panel section hidden" data-pane="general">
+    <div class="panel-h">Allgemein</div>
+    <div class="panel-b">
+      <div class="grid2">
+        <div><label for="c-user_name">Wie soll JARVIS dich nennen?</label><input type="text" id="c-user_name"></div>
+        <div><label for="c-home_location">Heimatort (Wetter, Karten)</label><input type="text" id="c-home_location" placeholder="z. B. Saarbrücken"></div>
+        <div><label for="c-default_sender">Standard-Absender (E-Mail)</label><input type="text" id="c-default_sender"></div>
+        <div><label for="c-email_forward_to">Wichtige E-Mails weiterleiten an</label><input type="email" id="c-email_forward_to"></div>
+        <div><label for="c-autoupdate_app_slug">Autoupdate-App-Slug</label><input type="text" id="c-autoupdate_app_slug" placeholder="jarvis"></div>
+        <div><label for="c-web_sync_url">Web-Sync-URL (Desktop → Web)</label><input type="url" id="c-web_sync_url" placeholder="{{ server_url }}"></div>
+      </div>
+      <div class="save-row"><button class="btn primary" data-save="general">Speichern</button><span class="flash"></span></div>
+    </div>
+  </section>
+
+  <!-- API-Keys -->
+  <section class="panel section hidden" data-pane="keys">
+    <div class="panel-h">API-Keys <span class="sub">werden nie vollständig angezeigt</span></div>
+    <div class="panel-b">
+      <div class="grid2">
+        <div><label for="k-gemini_api_key">Gemini API-Key <span id="kp-gemini_api_key" class="muted"></span></label><input type="password" id="k-gemini_api_key" placeholder="unverändert lassen" autocomplete="off"></div>
+        <div><label for="k-openrouter_api_key">OpenRouter API-Key <span id="kp-openrouter_api_key" class="muted"></span></label><input type="password" id="k-openrouter_api_key" placeholder="unverändert lassen" autocomplete="off"></div>
+        <div><label for="k-anthropic_api_key">Anthropic API-Key (claude_bridge) <span id="kp-anthropic_api_key" class="muted"></span></label><input type="password" id="k-anthropic_api_key" placeholder="unverändert lassen" autocomplete="off"></div>
+        <div><label for="k-tankerkoenig_api_key">Tankerkönig API-Key <span id="kp-tankerkoenig_api_key" class="muted"></span></label><input type="password" id="k-tankerkoenig_api_key" placeholder="unverändert lassen" autocomplete="off"></div>
+      </div>
+      <p class="hint">Online kannst du die Keys auch als Umgebungsvariablen setzen (GEMINI_API_KEY, OPENROUTER_API_KEY, ANTHROPIC_API_KEY, TANKERKOENIG_API_KEY).</p>
+      <div class="save-row"><button class="btn primary" id="save-keys">Keys speichern</button><span class="flash" id="keys-flash"></span></div>
+    </div>
+  </section>
+
+  <!-- E-Mail -->
+  <section class="panel section hidden" data-pane="email">
+    <div class="panel-h">E-Mail-Konten <button class="btn" id="add-email" style="padding:3px 9px">+ Konto</button></div>
+    <div class="panel-b">
+      <div id="email-list"></div>
+      <p class="hint">Bei Gmail ein App-Passwort verwenden. Passwörter werden maskiert angezeigt und bleiben erhalten, solange du „••••••“ nicht änderst.</p>
+      <div class="save-row"><button class="btn primary" data-save="email">Speichern</button><span class="flash"></span></div>
+    </div>
+  </section>
+
+  <!-- JDS & Admin -->
+  <section class="panel section hidden" data-pane="jds">
+    <div class="panel-h">JDS CRM &amp; ERP</div>
+    <div class="panel-b">
+      <div class="grid2">
+        <div><label for="j-base_url">Basis-URL</label><input type="url" id="j-base_url"></div>
+        <div><label for="j-team_code">Teamcode</label><input type="text" id="j-team_code"></div>
+        <div><label for="j-api_token">API-Token</label><input type="password" id="j-api_token" autocomplete="off"></div>
+        <div><label for="j-task_user_id">JARVIS-Aufgaben-User-ID</label><input type="text" id="j-task_user_id"></div>
+      </div>
+      <div class="subcard">
+        <label for="c-admin_api_secret">Joel-Digitals Admin-API-Secret (auch für Autoupdate &amp; Desktop-Sync)</label>
+        <input type="password" id="c-admin_api_secret" autocomplete="off">
+      </div>
+      <div class="save-row"><button class="btn primary" data-save="jds">Speichern</button><span class="flash"></span></div>
+    </div>
+  </section>
+
+  <!-- Wissens-Seiten -->
+  <section class="panel section hidden" data-pane="sites">
+    <div class="panel-h">Wissens-Seiten (knowledge_sites) <button class="btn" id="add-site" style="padding:3px 9px">+ Seite</button></div>
+    <div class="panel-b">
+      <div id="site-list"></div>
+      <div class="save-row"><button class="btn primary" data-save="sites">Speichern</button><span class="flash"></span></div>
+    </div>
+  </section>
+
+  <!-- Tagesbericht -->
+  <section class="panel section hidden" data-pane="report">
+    <div class="panel-h">Tagesbericht per E-Mail</div>
+    <div class="panel-b">
+      <label class="switch">Tagesbericht aktiv <input type="checkbox" id="r-enabled"></label>
+      <div class="grid2">
+        <div><label for="r-recipient_email">Empfänger</label><input type="email" id="r-recipient_email"></div>
+        <div><label for="r-times">Uhrzeiten (kommagetrennt)</label><input type="text" id="r-times" placeholder="08:00, 13:00, 18:00, 23:00"></div>
+      </div>
+      <label class="switch">Dashboard/Briefing <input type="checkbox" id="r-include_dashboard"></label>
+      <label class="switch">Wetter <input type="checkbox" id="r-include_weather"></label>
+      <label class="switch">E-Mails <input type="checkbox" id="r-include_emails"></label>
+      <p class="hint">Läuft online auf dem Server. Wenn gleichzeitig der Desktop-JARVIS läuft, kommen Berichte doppelt – dann auf dem Server JARVIS_BACKGROUND_JOBS=0 setzen oder hier deaktivieren.</p>
+      <div class="save-row"><button class="btn primary" data-save="report">Speichern</button><span class="flash"></span></div>
+    </div>
+  </section>
+
+  <!-- Discord -->
+  <section class="panel section hidden" data-pane="discord">
+    <div class="panel-h">Discord-Bot</div>
+    <div class="panel-b">
+      <div class="grid2">
+        <div><label for="d-bot_token">Bot-Token</label><input type="password" id="d-bot_token" autocomplete="off"></div>
+        <div><label for="d-allowed_channels">Erlaubte Kanal-IDs (kommagetrennt)</label><input type="text" id="d-allowed_channels"></div>
+      </div>
+      <p class="hint">Änderungen greifen nach einem Neustart des Servers.</p>
+      <div class="save-row"><button class="btn primary" data-save="discord">Speichern</button><span class="flash"></span></div>
+    </div>
+  </section>
+
+  <!-- Gedächtnis -->
+  <section class="panel section hidden" data-pane="memory">
+    <div class="panel-h">Gedächtnis &amp; Wissensdatenbank <span class="sub">JSON</span></div>
+    <div class="panel-b">
+      <label for="mem-json">Langzeitgedächtnis (memory/long_term.json)</label>
+      <textarea id="mem-json" rows="12" class="mono" spellcheck="false"></textarea>
+      <label for="kb-json">Wissensdatenbank (memory/knowledge_base.json)</label>
+      <textarea id="kb-json" rows="10" class="mono" spellcheck="false"></textarea>
+      <div class="save-row"><button class="btn primary" id="save-memory">Speichern</button><span class="flash" id="mem-flash"></span></div>
+    </div>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+{{ full_access|json_script:"full-access" }}
+<script>
+(function () {
+  const J = window.JARVIS, $ = (id) => document.getElementById(id), esc = J.esc;
+  const full = JSON.parse($("full-access").textContent);
+  const MASK = "••••••";
+  const flash = (el, msg, ok = true) => { el.textContent = msg; el.className = "flash " + (ok ? "ok" : "err"); setTimeout(() => el.textContent = "", 4000); };
+
+  // Tabs
+  document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => {
+    document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("active", x === b));
+    document.querySelectorAll("[data-pane]").forEach(p => p.classList.toggle("hidden", p.dataset.pane !== b.dataset.tab));
+    history.replaceState(null, "", "#" + b.dataset.tab);
+  });
+  const initial = location.hash.slice(1);
+  const initialBtn = document.querySelector(`#tabs [data-tab="${initial}"]`);
+  if (initialBtn) initialBtn.click();
+
+  // Account
+  const prof = (body) => J.api("/api/profile", { method: "POST", body });
+  $("p-tts").onchange = e => prof({ tts_enabled: e.target.checked });
+  $("p-wake").onchange = e => prof({ wake_word_mode: e.target.checked });
+  $("p-hydration").onchange = e => prof({ hydration_reminder: e.target.checked });
+  $("pw-save").onclick = async () => {
+    try { await prof({ old_password: $("pw-old").value, new_password: $("pw-new").value }); flash($("pw-flash"), "Passwort geändert."); $("pw-old").value = $("pw-new").value = ""; }
+    catch (e) { flash($("pw-flash"), e.message, false); }
+  };
+  $("chat-reset").onclick = async () => {
+    if (!confirm("Gesamten Chatverlauf löschen?")) return;
+    await J.api("/api/reset", { method: "POST", body: {} });
+    flash($("reset-flash"), "Verlauf gelöscht.");
+  };
+  if (!full) return;
+
+  // Desktop-Agent
+  J.api("/api/status").then(s => {
+    $("agent-status").textContent = s.agent.connected ? `verbunden · ${s.agent.host}` : "nicht verbunden";
+  });
+  $("copy-cmd").onclick = () => navigator.clipboard.writeText($("agent-cmd").textContent).then(() => flash($("agent-flash"), "Kopiert."));
+  $("regen-token").onclick = async () => {
+    if (!confirm("Neues Token erzeugen? Der laufende Agent muss danach mit dem neuen Token gestartet werden.")) return;
+    const r = await prof({ regenerate_token: true });
+    $("agent-cmd").textContent = $("agent-cmd").textContent.replace(/--token \S+/, "--token " + r.api_token);
+    flash($("agent-flash"), "Neues Token erzeugt.");
+  };
+
+  // Konfiguration laden
+  let cfg = {};
+  const val = (id, v) => { const el = $(id); if (el) el.type === "checkbox" ? (el.checked = !!v) : (el.value = v ?? ""); };
+  const get = (id) => { const el = $(id); return el.type === "checkbox" ? el.checked : el.value.trim(); };
+
+  function emailRow(a = {}) {
+    const d = document.createElement("div");
+    d.className = "subcard email-row";
+    d.innerHTML = `<div class="grid3">
+      <div><label>Name</label><input type="text" data-f="name" value="${esc(a.name || "")}"></div>
+      <div><label>E-Mail</label><input type="email" data-f="email" value="${esc(a.email || "")}"></div>
+      <div><label>Passwort / App-Passwort</label><input type="password" data-f="password" value="${esc(a.password || "")}" autocomplete="off"></div>
+      <div><label>IMAP-Server</label><input type="text" data-f="imap_server" value="${esc(a.imap_server || "imap.gmail.com")}"></div>
+      <div><label>SMTP-Server</label><input type="text" data-f="smtp_server" value="${esc(a.smtp_server || "smtp.gmail.com")}"></div>
+      <div><label>SMTP-Port</label><input type="number" data-f="smtp_port" value="${esc(a.smtp_port || 587)}"></div>
+    </div><div class="save-row"><button class="btn danger" type="button">Entfernen</button></div>`;
+    d.querySelector(".danger").onclick = () => d.remove();
+    $("email-list").appendChild(d);
+  }
+  function siteRow(s = {}) {
+    const d = document.createElement("div");
+    d.className = "subcard site-row";
+    d.innerHTML = `<div class="grid3">
+      <div><label>Name</label><input type="text" data-f="name" value="${esc(s.name || "")}"></div>
+      <div><label>URL</label><input type="url" data-f="url" value="${esc(s.url || "")}"></div>
+      <div><label>Login-URL</label><input type="text" data-f="login_url" value="${esc(s.login_url || "")}"></div>
+      <div><label>Benutzer</label><input type="text" data-f="username" value="${esc(s.username || "")}"></div>
+      <div><label>Passwort</label><input type="password" data-f="password" value="${esc(s.password || "")}" autocomplete="off"></div>
+      <div><label>Seiten (kommagetrennt)</label><input type="text" data-f="pages" value="${esc((s.pages || []).join(", "))}"></div>
+    </div><div class="save-row"><button class="btn danger" type="button">Entfernen</button></div>`;
+    d.querySelector(".danger").onclick = () => d.remove();
+    $("site-list").appendChild(d);
+  }
+  const rows = (sel) => [...document.querySelectorAll(sel)].map(r => {
+    const o = {};
+    r.querySelectorAll("[data-f]").forEach(i => o[i.dataset.f] = i.value.trim());
+    return o;
+  });
+  $("add-email").onclick = () => emailRow();
+  $("add-site").onclick = () => siteRow();
+
+  async function loadConfig() {
+    cfg = await J.api("/api/config");
+    ["user_name", "home_location", "default_sender", "email_forward_to", "autoupdate_app_slug", "web_sync_url", "admin_api_secret"].forEach(k => val("c-" + k, cfg[k]));
+    const jds = cfg.jds_config || {};
+    ["base_url", "team_code", "api_token", "task_user_id"].forEach(k => val("j-" + k, jds[k]));
+    const dr = cfg.daily_report || {};
+    ["enabled", "recipient_email", "include_dashboard", "include_weather", "include_emails"].forEach(k => val("r-" + k, dr[k]));
+    val("r-times", (dr.times || []).join(", "));
+    const dc = cfg.discord_config || {};
+    val("d-bot_token", dc.bot_token);
+    val("d-allowed_channels", (dc.allowed_channels || []).join(", "));
+    $("email-list").innerHTML = ""; (cfg.email_accounts || []).forEach(emailRow);
+    $("site-list").innerHTML = ""; (cfg.knowledge_sites || []).forEach(siteRow);
+  }
+  const split = (s) => s.split(",").map(x => x.trim()).filter(Boolean);
+  const builders = {
+    general: () => Object.fromEntries(["user_name", "home_location", "default_sender", "email_forward_to", "autoupdate_app_slug", "web_sync_url"].map(k => [k, get("c-" + k)])),
+    email: () => ({ email_accounts: rows(".email-row").filter(a => a.email).map(a => ({ ...a, smtp_port: parseInt(a.smtp_port) || 587 })) }),
+    jds: () => ({ jds_config: Object.fromEntries(["base_url", "team_code", "api_token", "task_user_id"].map(k => [k, get("j-" + k)])), admin_api_secret: get("c-admin_api_secret") }),
+    sites: () => ({ knowledge_sites: rows(".site-row").filter(s => s.url).map(s => ({ ...s, url: s.url.replace(/\/$/, ""), pages: split(s.pages) })) }),
+    report: () => ({ daily_report: { enabled: get("r-enabled"), recipient_email: get("r-recipient_email"), times: split(get("r-times")),
+      include_dashboard: get("r-include_dashboard"), include_weather: get("r-include_weather"), include_emails: get("r-include_emails") } }),
+    discord: () => ({ discord_config: { bot_token: get("d-bot_token"), allowed_channels: split(get("d-allowed_channels")) } }),
+  };
+  document.querySelectorAll("[data-save]").forEach(b => b.onclick = async () => {
+    const fl = b.parentElement.querySelector(".flash");
+    try { const r = await J.api("/api/config", { method: "POST", body: builders[b.dataset.save]() }); flash(fl, r.message); loadConfig(); }
+    catch (e) { flash(fl, e.message, false); }
+  });
+
+  // API-Keys
+  async function loadKeys() {
+    const k = await J.api("/api/keys");
+    Object.entries(k).forEach(([name, info]) => { const el = $("kp-" + name); if (el) el.textContent = info.set ? `(${info.preview})` : "(nicht gesetzt)"; });
+  }
+  $("save-keys").onclick = async () => {
+    const body = {};
+    ["gemini_api_key", "openrouter_api_key", "anthropic_api_key", "tankerkoenig_api_key"].forEach(k => { const v = $("k-" + k).value.trim(); if (v) body[k] = v; });
+    try { const r = await J.api("/api/keys", { method: "POST", body }); flash($("keys-flash"), r.message); document.querySelectorAll("[id^=k-]").forEach(i => i.value = ""); loadKeys(); }
+    catch (e) { flash($("keys-flash"), e.message, false); }
+  };
+
+  // Gedächtnis
+  async function loadMemory() {
+    const m = await J.api("/api/memory");
+    $("mem-json").value = JSON.stringify(m.memory, null, 2);
+    $("kb-json").value = JSON.stringify(m.knowledge_base, null, 2);
+  }
+  $("save-memory").onclick = async () => {
+    try {
+      const body = { memory: JSON.parse($("mem-json").value || "{}"), knowledge_base: JSON.parse($("kb-json").value || "{}") };
+      await J.api("/api/memory", { method: "POST", body });
+      flash($("mem-flash"), "Gespeichert.");
+    } catch (e) { flash($("mem-flash"), e.message, false); }
+  };
+
+  loadConfig(); loadKeys(); loadMemory();
+})();
+</script>
+{% endblock %}

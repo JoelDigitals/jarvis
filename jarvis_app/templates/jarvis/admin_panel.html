@@ -1,0 +1,190 @@
+{% extends "jarvis/base.html" %}
+{% block title %}Admin · JARVIS{% endblock %}
+{% block body %}
+<div class="page">
+  <h1>ADMIN</h1>
+  <p class="lead">Benutzer, Lizenzen, Autoupdate und gespeicherte Zustandsdateien. Vollständige Datenbank: <a href="/django-admin/">Django-Admin</a>.</p>
+
+  <div class="tabs" id="tabs">
+    <button data-tab="users" class="active">Benutzer</button>
+    <button data-tab="licenses">Lizenzen</button>
+    <button data-tab="updates">Autoupdate</button>
+    <button data-tab="state">Zustandsdateien</button>
+    <button data-tab="sync">Desktop-Sync</button>
+  </div>
+
+  <section class="panel section" data-pane="users">
+    <div class="panel-h">Benutzer</div>
+    <div class="panel-b table-wrap"><table>
+      <thead><tr><th>Benutzer</th><th>Rolle</th><th>Vollzugriff</th><th>Aktiv</th><th>Letzter Login</th><th></th></tr></thead>
+      <tbody id="users"></tbody></table>
+      <p class="hint">Vollzugriff = E-Mails, JDS, Admin-API, Gedächtnis, Desktop-Agent. Normale Lizenz-Nutzer bekommen nur öffentliche Tools (Suche, Wetter, Karten, Dateien, …).</p>
+    </div>
+  </section>
+
+  <section class="panel section hidden" data-pane="licenses">
+    <div class="panel-h">Lizenzschlüssel</div>
+    <div class="panel-b">
+      <form class="row" id="license-form" style="flex-wrap:wrap">
+        <input type="text" id="lic-label" placeholder="Bezeichnung (optional)" style="max-width:260px">
+        <input type="number" id="lic-uses" value="20" min="1" style="max-width:110px" title="max. Aktivierungen">
+        <button class="btn primary" type="submit">Schlüssel erzeugen</button>
+        <span class="flash" id="lic-flash"></span>
+      </form>
+      <div class="table-wrap" style="margin-top:12px"><table>
+        <thead><tr><th>Schlüssel</th><th>Bezeichnung</th><th>Nutzung</th><th>Status</th><th></th></tr></thead>
+        <tbody id="licenses"></tbody></table></div>
+    </div>
+  </section>
+
+  <section class="panel section hidden" data-pane="updates">
+    <div class="panel-h">Autoupdate</div>
+    <div class="panel-b">
+      <form class="grid3" id="app-form">
+        <div><label>Name</label><input type="text" id="app-name" required></div>
+        <div><label>Slug</label><input type="text" id="app-slug" required placeholder="jarvis"></div>
+        <div><label>Beschreibung</label><input type="text" id="app-desc"></div>
+      </form>
+      <div class="save-row"><button class="btn" id="app-add">App anlegen</button><span class="flash" id="app-flash"></span></div>
+      <div id="apps" style="margin-top:14px"></div>
+      <p class="hint">Der Desktop-JARVIS prüft alle 4 Stunden <code>/api/autoupdate/check/&lt;slug&gt;?current_version=x.x.x.x</code>.</p>
+    </div>
+  </section>
+
+  <section class="panel section hidden" data-pane="state">
+    <div class="panel-h">Zustandsdateien <span class="sub">in der Datenbank gesichert</span></div>
+    <div class="panel-b">
+      <form class="row" id="state-form" style="flex-wrap:wrap">
+        <input type="text" id="state-path" placeholder="config/google_calendar_token.pickle" style="max-width:340px">
+        <input type="file" id="state-file" required style="max-width:260px">
+        <button class="btn" type="submit">Hochladen</button>
+        <span class="flash" id="state-flash"></span>
+      </form>
+      <div class="table-wrap" style="margin-top:12px"><table>
+        <thead><tr><th>Pfad</th><th>Größe</th><th>Aktualisiert</th></tr></thead>
+        <tbody id="states"></tbody></table></div>
+    </div>
+  </section>
+
+  <section class="panel section hidden" data-pane="sync">
+    <div class="panel-h">Desktop-Sync <span class="sub" id="sync-state"></span></div>
+    <div class="panel-b log" id="sync-logs"></div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const J = window.JARVIS, $ = (id) => document.getElementById(id), esc = J.esc;
+  const flash = (el, msg, ok = true) => { el.textContent = msg; el.className = "flash " + (ok ? "ok" : "err"); setTimeout(() => el.textContent = "", 5000); };
+  const dt = (s) => s ? new Date(s).toLocaleString("de-DE") : "–";
+
+  document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => {
+    document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("active", x === b));
+    document.querySelectorAll("[data-pane]").forEach(p => p.classList.toggle("hidden", p.dataset.pane !== b.dataset.tab));
+  });
+
+  async function loadUsers() {
+    const users = await J.api("/api/admin/users");
+    $("users").innerHTML = "";
+    users.forEach(u => {
+      const tr = document.createElement("tr");
+      const self = u.role === "admin";
+      tr.innerHTML = `<td>${esc(u.username)}</td><td>${u.role}</td>
+        <td><input type="checkbox" ${u.full_access ? "checked" : ""} ${self ? "disabled" : ""}></td>
+        <td><input type="checkbox" ${u.active ? "checked" : ""} ${self ? "disabled" : ""}></td>
+        <td class="muted">${dt(u.last_login)}</td>
+        <td>${self ? "" : '<button class="btn danger" style="padding:3px 8px">Löschen</button>'}</td>`;
+      const [fa, act] = tr.querySelectorAll("input");
+      fa.onchange = () => J.api(`/api/admin/users/${u.id}`, { method: "POST", body: { full_access: fa.checked } });
+      act.onchange = () => J.api(`/api/admin/users/${u.id}`, { method: "POST", body: { active: act.checked } });
+      const del = tr.querySelector(".danger");
+      if (del) del.onclick = async () => { if (confirm(`${u.username} löschen?`)) { await J.api(`/api/admin/users/${u.id}`, { method: "DELETE" }); loadUsers(); } };
+      $("users").appendChild(tr);
+    });
+  }
+
+  async function loadLicenses() {
+    const keys = await J.api("/api/admin/licenses");
+    $("licenses").innerHTML = keys.length ? "" : '<tr><td colspan="5" class="muted">Noch keine Schlüssel.</td></tr>';
+    keys.forEach(k => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td><code>${esc(k.key)}</code></td><td>${esc(k.label)}</td><td>${k.uses} / ${k.max_uses}</td>
+        <td>${k.active ? '<span class="pill"><span class="dot ok"></span>aktiv</span>' : '<span class="pill"><span class="dot bad"></span>widerrufen</span>'}</td>
+        <td>${k.active ? '<button class="btn danger" style="padding:3px 8px">Widerrufen</button>' : ""}</td>`;
+      const b = tr.querySelector(".danger");
+      if (b) b.onclick = async () => { await J.api(`/api/admin/licenses/${encodeURIComponent(k.key)}`, { method: "DELETE" }); loadLicenses(); };
+      $("licenses").appendChild(tr);
+    });
+  }
+  $("license-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const r = await J.api("/api/admin/licenses", { method: "POST", body: { label: $("lic-label").value, max_uses: $("lic-uses").value } });
+    flash($("lic-flash"), "Erzeugt: " + r.key);
+    navigator.clipboard && navigator.clipboard.writeText(r.key).catch(() => {});
+    loadLicenses();
+  };
+
+  async function loadApps() {
+    const apps = await J.api("/api/autoupdate/apps");
+    const box = $("apps");
+    box.innerHTML = apps.length ? "" : '<p class="muted">Noch keine Apps.</p>';
+    apps.forEach(a => {
+      const d = document.createElement("div");
+      d.className = "subcard";
+      d.innerHTML = `<div class="row" style="margin-top:8px"><b class="grow">${esc(a.name)} <span class="muted mono">${esc(a.slug)}</span></b>
+          <button class="btn danger" style="padding:3px 8px">App löschen</button></div>
+        <div class="table-wrap"><table><thead><tr><th>Version</th><th>Datum</th><th>Download</th><th>Notizen</th><th></th></tr></thead><tbody>
+        ${a.versions.map(v => `<tr><td class="mono">${esc(v.version)}</td><td>${esc(v.release_date)}</td>
+          <td><a href="${esc(v.download_link)}" target="_blank" rel="noopener">Link</a></td><td>${esc(v.release_notes).slice(0, 80)}</td>
+          <td><button class="btn" data-v="${esc(v.version)}" style="padding:2px 7px">✕</button></td></tr>`).join("")}
+        </tbody></table></div>
+        <div class="grid3"><div><label>Version (x.x.x.x)</label><input type="text" class="v-ver"></div>
+          <div><label>Download-Link</label><input type="url" class="v-link"></div>
+          <div><label>Release-Notes</label><input type="text" class="v-notes"></div></div>
+        <div class="save-row"><button class="btn primary v-add">Version hinzufügen</button><span class="flash"></span></div>`;
+      d.querySelector(".danger").onclick = async () => { if (confirm(`App ${a.slug} löschen?`)) { await J.api(`/api/autoupdate/apps/${a.slug}`, { method: "DELETE" }); loadApps(); } };
+      d.querySelectorAll("[data-v]").forEach(b => b.onclick = async () => { await J.api(`/api/autoupdate/versions/${a.slug}?version=${encodeURIComponent(b.dataset.v)}`, { method: "DELETE" }); loadApps(); });
+      d.querySelector(".v-add").onclick = async (e) => {
+        try {
+          await J.api(`/api/autoupdate/versions/${a.slug}`, { method: "POST", body: {
+            version: d.querySelector(".v-ver").value.trim(), download_link: d.querySelector(".v-link").value.trim(),
+            release_notes: d.querySelector(".v-notes").value.trim() } });
+          loadApps();
+        } catch (err) { flash(e.target.nextElementSibling, err.message, false); }
+      };
+      box.appendChild(d);
+    });
+  }
+  $("app-add").onclick = async () => {
+    try {
+      await J.api("/api/autoupdate/apps", { method: "POST", body: { name: $("app-name").value, slug: $("app-slug").value, description: $("app-desc").value } });
+      $("app-form").reset(); loadApps();
+    } catch (e) { flash($("app-flash"), e.message, false); }
+  };
+
+  async function loadStates() {
+    const files = await J.api("/api/admin/state");
+    $("states").innerHTML = files.map(f => `<tr><td class="mono">${esc(f.path)}</td><td>${(f.size / 1024).toFixed(1)} KB</td><td class="muted">${dt(f.updated_at)}</td></tr>`).join("");
+  }
+  $("state-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData();
+    fd.append("file", $("state-file").files[0]);
+    fd.append("path", $("state-path").value.trim());
+    try { const r = await J.api("/api/admin/state", { method: "POST", body: fd }); flash($("state-flash"), "Gespeichert: " + r.path); loadStates(); }
+    catch (err) { flash($("state-flash"), err.message, false); }
+  };
+
+  async function loadSync() {
+    const s = await J.api("/api/sync-logs");
+    $("sync-state").textContent = s.state;
+    $("sync-logs").innerHTML = s.logs.length ? s.logs.slice().reverse().map(l => `<div><span class="t">${esc(l.ts)}</span>${esc(l.text)}</div>`).join("")
+      : '<div class="muted">Noch keine Logs vom Desktop-JARVIS empfangen.</div>';
+  }
+
+  loadUsers(); loadLicenses(); loadApps(); loadStates(); loadSync();
+  setInterval(loadSync, 10000);
+})();
+</script>
+{% endblock %}

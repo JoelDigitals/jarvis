@@ -1,3 +1,4 @@
+from jarvis_core.paths import DataPath
 import json
 import re
 from datetime import datetime
@@ -13,7 +14,7 @@ def get_base_dir() -> Path:
 
 
 BASE_DIR         = get_base_dir()
-MEMORY_PATH      = BASE_DIR / "memory" / "long_term.json"
+MEMORY_PATH      = DataPath("memory") / "long_term.json"
 _lock            = Lock()
 MAX_VALUE_LENGTH = 380
 MEMORY_MAX_CHARS = 2200

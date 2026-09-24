@@ -1,0 +1,43 @@
+{% extends "jarvis/base.html" %}
+{% block title %}Anmelden · JARVIS{% endblock %}
+{% block body %}
+<div class="auth-wrap">
+  <div class="auth">
+    <div class="brand"><span class="logo"></span>J.A.R.V.I.S</div>
+    <div class="panel">
+      <div class="tabs" style="padding:12px 12px 0;margin:0">
+        <button type="button" data-tab="login" class="{% if tab != 'register' %}active{% endif %}">Anmelden</button>
+        <button type="button" data-tab="register" class="{% if tab == 'register' %}active{% endif %}">Registrieren</button>
+      </div>
+      <div class="panel-b">
+        {% if error %}<div class="error-box">{{ error }}</div>{% endif %}
+        <form method="post" id="auth-form" autocomplete="on">
+          {% csrf_token %}
+          <input type="hidden" name="mode" id="mode" value="{{ tab|default:'login' }}">
+          <div id="license-row" class="{% if tab != 'register' %}hidden{% endif %}">
+            <label for="license_key">Lizenzschlüssel</label>
+            <input type="text" id="license_key" name="license_key" placeholder="JARVIS-XXXXXXXXXXXXXXXX" autocomplete="off">
+          </div>
+          <label for="username">Benutzername</label>
+          <input type="text" id="username" name="username" value="{{ username|default:'' }}" autocomplete="username" required autofocus>
+          <label for="password">Passwort</label>
+          <input type="password" id="password" name="password" autocomplete="current-password" required>
+          <button class="btn primary" type="submit" id="submit">{% if tab == 'register' %}Account erstellen{% else %}Anmelden{% endif %}</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => {
+    const reg = b.dataset.tab === "register";
+    document.querySelectorAll("[data-tab]").forEach(x => x.classList.toggle("active", x === b));
+    document.getElementById("mode").value = b.dataset.tab;
+    document.getElementById("license-row").classList.toggle("hidden", !reg);
+    document.getElementById("submit").textContent = reg ? "Account erstellen" : "Anmelden";
+    document.getElementById("password").autocomplete = reg ? "new-password" : "current-password";
+  }));
+</script>
+{% endblock %}

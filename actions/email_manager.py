@@ -1,3 +1,4 @@
+from jarvis_core.paths import DataPath
 import imaplib
 import smtplib
 import email
@@ -14,9 +15,9 @@ def _base_dir() -> Path:
         return Path(sys.executable).parent
     return Path(__file__).resolve().parent.parent
 
-SETTINGS_PATH = _base_dir() / "config" / "settings.json"
-LEGACY_PATH   = _base_dir() / "config" / "email_config.json"
-EMAIL_CACHE   = _base_dir() / "memory" / "email_cache.json"
+SETTINGS_PATH = DataPath("config") / "settings.json"
+LEGACY_PATH   = DataPath("config") / "email_config.json"
+EMAIL_CACHE   = DataPath("memory") / "email_cache.json"
 
 def _load_all_accounts() -> list[dict]:
     try:
