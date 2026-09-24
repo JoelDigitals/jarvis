@@ -23,6 +23,15 @@ class Profile(models.Model):
     current_file = models.CharField(max_length=500, blank=True)
 
     @property
+    def full_access(self):
+        """Voller Zugriff = Admin oder gültige Lizenz."""
+        return self.user.is_superuser or self.license_valid()
+
+    @property
+    def has_full_access(self):
+        return self.full_access
+
+    @property
     def data_root(self):
         from jarvis_core.paths import PROJECT_ROOT
         if self.uses_main_data:

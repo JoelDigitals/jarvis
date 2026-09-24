@@ -16,6 +16,7 @@
     <button data-tab="sites">Wissens-Seiten</button>
     <button data-tab="report">Tagesbericht</button>
     <button data-tab="discord">Discord</button>
+    <button data-tab="hermes">Hermes Agent</button>
     <button data-tab="memory">Gedächtnis</button>
     {% endif %}
   </div>
@@ -157,6 +158,29 @@
     </div>
   </section>
 
+  <!-- Hermes Agent -->
+  <section class="panel section hidden" data-pane="hermes">
+    <div class="panel-h">Hermes Agent (Nous Research) <span class="sub" id="h-status">…</span></div>
+    <div class="panel-b">
+      <p>Ein autonomer Agent mit Terminal, Dateisystem, Web-Recherche und Code-Ausführung. JARVIS delegiert ihm
+        mehrstufige Aufträge („hermes_agent“-Tool). Lokal: <code>hermes gateway</code> mit
+        <code>API_SERVER_ENABLED=true</code> starten – standardmäßig <code>http://127.0.0.1:8642</code>.</p>
+      <div class="grid2">
+        <div><label for="h-base_url">Basis-URL</label><input type="url" id="h-base_url" placeholder="http://127.0.0.1:8642"></div>
+        <div><label for="h-model">Modell</label><input type="text" id="h-model" placeholder="hermes-agent"></div>
+        <div><label for="h-api_key">API-Key (API_SERVER_KEY)</label><input type="password" id="h-api_key" placeholder="unverändert lassen" autocomplete="off"></div>
+      </div>
+      <p class="hint">Leer lassen = Standard (127.0.0.1:8642). Wenn der Hermes-Agent auf deinem PC läuft, rufe die
+        Aufträge über den Desktop-Agent auf – trage hier nur eine öffentlich erreichbare URL ein, wenn der Server
+        Hermes direkt erreichen soll. Alternativ umgebungsvariablen: HERMES_API_URL, HERMES_API_KEY, HERMES_MODEL.</p>
+      <div class="save-row">
+        <button class="btn primary" data-save="hermes">Speichern</button>
+        <button class="btn" id="hermes-test">Verbindung testen</button>
+        <span class="flash"></span>
+      </div>
+    </div>
+  </section>
+
   <!-- Gedächtnis -->
   <section class="panel section hidden" data-pane="memory">
     <div class="panel-h">Gedächtnis &amp; Wissensdatenbank <span class="sub">JSON</span></div>
@@ -270,6 +294,8 @@
     const dc = cfg.discord_config || {};
     val("d-bot_token", dc.bot_token);
     val("d-allowed_channels", (dc.allowed_channels || []).join(", "));
+    const hc = cfg.hermes_config || {};
+    ["base_url", "model", "api_key"].forEach(k => val("h-" + k, hc[k]));
     $("email-list").innerHTML = ""; (cfg.email_accounts || []).forEach(emailRow);
     $("site-list").innerHTML = ""; (cfg.knowledge_sites || []).forEach(siteRow);
   }
@@ -282,6 +308,7 @@
     report: () => ({ daily_report: { enabled: get("r-enabled"), recipient_email: get("r-recipient_email"), times: split(get("r-times")),
       include_dashboard: get("r-include_dashboard"), include_weather: get("r-include_weather"), include_emails: get("r-include_emails") } }),
     discord: () => ({ discord_config: { bot_token: get("d-bot_token"), allowed_channels: split(get("d-allowed_channels")) } }),
+    hermes: () => ({ hermes_config: { base_url: get("h-base_url"), api_key: get("h-api_key"), model: get("h-model") || "hermes-agent" } }),
   };
   document.querySelectorAll("[data-save]").forEach(b => b.onclick = async () => {
     const fl = b.parentElement.querySelector(".flash");
@@ -315,7 +342,18 @@
     } catch (e) { flash($("mem-flash"), e.message, false); }
   };
 
-  loadConfig(); loadKeys(); loadMemory();
+  // Hermes Agent
+  async function hermesStatus() {
+    try {
+      const r = await J.api("/api/hermes/status");
+      const el = $("h-status");
+      el.textContent = r.ok ? "verbunden" : "nicht erreichbar";
+      el.title = r.status || "";
+    } catch (e) { $("h-status").textContent = "Fehler: " + e.message; }
+  }
+  $("hermes-test").onclick = async () => { await hermesStatus(); flash($("h-status"), "", true); };
+
+  loadConfig(); loadKeys(); loadMemory(); hermesStatus();
 })();
 </script>
 {% endblock %}

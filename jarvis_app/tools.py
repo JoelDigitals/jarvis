@@ -92,6 +92,7 @@ class ToolContext:
     current_file: str = ""
     on_shutdown: object = None       # Callback der Voice-Session
     uses_main_data: bool = False
+    full_access: bool = False
 
     @classmethod
     def for_user(cls, user, channel="text", client_id=None, on_shutdown=None) -> "ToolContext":
@@ -101,6 +102,7 @@ class ToolContext:
             user_id=user.id, username=user.username, is_admin=user.is_superuser,
             data_root=profile.data_root, channel=channel, client_id=client_id,
             current_file=profile.current_file, on_shutdown=on_shutdown, uses_main_data=profile.uses_main_data,
+            full_access=profile.has_full_access,
         )
 
 
@@ -407,6 +409,8 @@ def _hermes_cfg(ctx) -> dict:
         # Server-weite Hermes-Instanz (Umgebungsvariablen) nur für Admins
         cfg["base_url"] = os.environ["HERMES_API_URL"].rstrip("/")
         cfg["api_key"] = os.environ.get("HERMES_API_KEY", "")
+        if os.environ.get("HERMES_MODEL"):
+            cfg["model"] = os.environ["HERMES_MODEL"]
     return cfg
 
 

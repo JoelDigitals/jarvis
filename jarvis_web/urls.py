@@ -30,6 +30,7 @@ urlpatterns = [
     path("api/alarms", views.api_alarms),
     path("api/profile", views.api_profile),
     path("api/autopilot", views.api_autopilot),
+    path("api/hermes/status", views.api_hermes_status),
 
     # Konfiguration
     path("api/config", views.api_config),

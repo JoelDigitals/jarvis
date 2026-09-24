@@ -8,13 +8,17 @@ from .models import (
 
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
-    list_display = ("user", "full_access", "wake_word_mode", "hydration_reminder")
-    list_editable = ("full_access",)
+    list_display = ("user", "uses_main_data", "wake_word_mode", "hydration_reminder")
+    list_editable = ("uses_main_data",)
 
 
 @admin.register(LicenseKey)
 class LicenseKeyAdmin(admin.ModelAdmin):
-    list_display = ("key", "label", "uses", "max_uses", "active", "created_at")
+    list_display = ("key", "label", "user", "valid", "active", "created_at")
+
+    @admin.display(description="Gültig")
+    def valid(self, obj):
+        return obj.is_valid
 
 
 @admin.register(ChatMessage)

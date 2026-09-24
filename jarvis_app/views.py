@@ -357,6 +357,36 @@ def api_status(request):
     return JsonResponse(data)
 
 
+@api(methods=("GET",))
+def api_hermes_status(request):
+    """Verbindung zum Hermes Agent testen (Hintergrund-Thread, damit der Request nie hängt)."""
+    import threading
+    from actions.hermes_agent import load_config, status as hermes_probe
+
+    user = request.jarvis_user
+    p = _profile(user)
+    if not p.has_full_access:
+        return JsonResponse({"ok": False, "status": "Kein Zugriff."}, status=403)
+    cfg = load_config()
+    out = {"ok": False, "status": ""}
+
+    def _probe():
+        try:
+            out["status"] = hermes_probe(cfg)
+            out["ok"] = out["status"].startswith("Hermes Agent ist erreichbar")
+        except Exception as e:
+            out["status"] = f"Hermes-Statusfehler: {e}"
+        finally:
+            close_old_connections()
+
+    t = threading.Thread(target=_probe, daemon=True, name="hermes-status")
+    t.start()
+    t.join(timeout=15)
+    if t.is_alive():
+        out["status"] = "Hermes Agent antwortet nicht (Timeout nach 15s)."
+    return JsonResponse(out)
+
+
 @api(methods=("GET", "POST"))
 def api_notifications(request):
     qs = Notification.objects.filter(user=request.jarvis_user)
@@ -454,7 +484,8 @@ def _masked_settings() -> dict:
         for item in cfg.get(list_key) or []:
             if item.get(field):
                 item[field] = SECRET_MASK
-    for section, field in (("jds_config", "api_token"), ("discord_config", "bot_token")):
+    for section, field in (("jds_config", "api_token"), ("discord_config", "bot_token"),
+                           ("hermes_config", "api_key")):
         if (cfg.get(section) or {}).get(field):
             cfg[section][field] = SECRET_MASK
     if cfg.get("admin_api_secret"):
@@ -471,7 +502,8 @@ def _unmask(new: dict, old: dict) -> dict:
                 if item.get(field) == SECRET_MASK:
                     prev = old_items.get(item.get("email") or item.get("url") or item.get("name")) or {}
                     item[field] = prev.get(field, "")
-    for section, field in (("jds_config", "api_token"), ("discord_config", "bot_token")):
+    for section, field in (("jds_config", "api_token"), ("discord_config", "bot_token"),
+                           ("hermes_config", "api_key")):
         if section in new and (new[section] or {}).get(field) == SECRET_MASK:
             new[section][field] = (old.get(section) or {}).get(field, "")
     if new.get("admin_api_secret") == SECRET_MASK:
@@ -485,7 +517,8 @@ def api_config(request):
         data = _body(request)
         allowed = {"user_name", "home_location", "default_sender", "email_accounts", "knowledge_sites",
                    "briefing_enabled", "briefing_time", "jds_config", "discord_config", "email_forward_to",
-                   "daily_report", "admin_api_secret", "web_sync_url", "server_url", "autoupdate_app_slug"}
+                   "daily_report", "admin_api_secret", "web_sync_url", "server_url", "autoupdate_app_slug",
+                   "hermes_config"}
         clean = _unmask({k: v for k, v in data.items() if k in allowed}, load_settings())
         save_settings(clean)
         state_sync.snapshot()

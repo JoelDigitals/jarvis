@@ -25,6 +25,11 @@ DEFAULT = {
         "bot_token": "",
         "allowed_channels": [],
     },
+    "hermes_config": {
+        "base_url": "",
+        "api_key": "",
+        "model": "hermes-agent",
+    },
     "email_forward_to": "",
     "daily_report": {
         "enabled": True,
